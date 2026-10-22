@@ -54,7 +54,8 @@ export default function Mines() {
     if (view.free_spins) {
       sfx.dynamite()
       setNote('Три динамита! Десять бесплатных спинов.')
-      await wait(1500)
+      s.highlight(winCells([]))
+      await s.bonus({ title: 'БОНУС!', sub: '10 БЕСПЛАТНЫХ СПИНОВ' })
       let total: number = view.base_win
       for (let i = 0; i < view.free_spins.length; i++) {
         const fs = view.free_spins[i]

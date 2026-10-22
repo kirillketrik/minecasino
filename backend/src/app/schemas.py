@@ -34,6 +34,7 @@ class UserOut(BaseModel):
     balance: int
     created_at: datetime
     excluded_until: datetime | None = None
+    is_admin: bool = False
 
 
 class TransactionOut(BaseModel):

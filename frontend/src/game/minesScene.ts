@@ -1,6 +1,8 @@
 import { Container, Graphics, Sprite, TilingSprite } from 'pixi.js'
 import type { Application } from 'pixi.js'
 import { reducedMotion } from '../format.ts'
+import { bonusIntro } from './bonusFx.ts'
+import type { BonusIntro } from './bonusFx.ts'
 import { textureOf } from './sprites.ts'
 import type { SpriteName } from './sprites.ts'
 import { easeOutBack, tween, wait } from './stage.tsx'
@@ -62,6 +64,7 @@ export class MinesScene {
   private reels: Container[] = []
   private current: string[][] = []
   private marks = new Graphics()
+  private fx = new Container()
   private alive = true
 
   private app: Application
@@ -93,7 +96,7 @@ export class MinesScene {
       world.addChild(reel)
       this.reels.push(reel)
     }
-    world.addChild(this.marks)
+    world.addChild(this.marks, this.fx)
     const idle = Array.from({ length: REELS }, (_, r) =>
       Array.from({ length: ROWS }, (_, row) => FILLERS[(r * 3 + row) % FILLERS.length]),
     )
@@ -102,6 +105,11 @@ export class MinesScene {
 
   destroy() {
     this.alive = false
+  }
+
+  /** Full-field announcement of a won bonus. */
+  bonus(opts: Pick<BonusIntro, 'title' | 'sub'>) {
+    return bonusIntro(this.app, this.fx, MINES_W, MINES_H, { icon: 'dynamite', color: 0xf5bd45, ...opts })
   }
 
   private fillReel(reel: Container, symbols: string[]) {

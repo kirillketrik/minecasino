@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app import runtime_config
 from app.api.deps import CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.games import registry, service
@@ -70,15 +71,16 @@ def _out(round_: Round, user: User) -> RoundOut:
 
 
 @router.get("/games", response_model=list[GameInfo])
-async def list_games(settings: SettingsDep) -> list[GameInfo]:
+async def list_games(settings: SettingsDep, session: SessionDep) -> list[GameInfo]:
+    config = await runtime_config.load(session)
     return [
         GameInfo(
             id=g.id,
             min_bet=max(settings.min_bet, g.min_bet),
-            max_bet=settings.max_bet,
+            max_bet=min(settings.max_bet, config.game(g.id).max_bet or settings.max_bet),
             bet_step=g.bet_step,
             max_win_multiplier=settings.max_win_multiplier,
-            modes=g.modes,
+            modes={k: v for k, v in g.modes.items() if k not in config.game(g.id).disabled_modes},
         )
         for g in registry.all_games()
     ]

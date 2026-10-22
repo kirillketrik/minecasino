@@ -56,6 +56,7 @@ class User(Base):
     deposit_limit: Mapped[int | None] = mapped_column(BigInteger, default=None)
     loss_limit: Mapped[int | None] = mapped_column(BigInteger, default=None)
     excluded_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")
 
@@ -107,3 +108,12 @@ class Round(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class AppConfig(Base):
+    """Key/value settings edited from the admin page (see app.runtime_config)."""
+
+    __tablename__ = "app_config"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON, default=dict)

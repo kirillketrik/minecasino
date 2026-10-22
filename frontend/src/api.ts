@@ -40,6 +40,7 @@ const RU_ERRORS: Record<string, string> = {
   'Round already finished': 'Раунд уже завершён.',
   'Too early to cash out': 'Слишком рано: вывод доступен от 1.01×.',
   'Not authenticated': 'Войдите в аккаунт.',
+  'Admins only': 'Раздел только для администраторов.',
 }
 
 function detailText(detail: unknown, status: number): string {
@@ -55,6 +56,8 @@ function detailText(detail: unknown, status: number): string {
     if (lossLim) return `Лимит проигрыша за 24 часа: осталось ${lossLim[1]} монет. Изменить лимит можно в разделе «Лимиты».`
     const depLim = /^Deposit limit reached: (\d+) left$/.exec(detail)
     if (depLim) return `Лимит пополнения за 24 часа: осталось ${depLim[1]} монет.`
+    const off = /^Mode '(.+)' is switched off$/.exec(detail)
+    if (off) return 'Этот режим сейчас отключён.'
     const minWd = /^Minimum withdrawal is (\d+)$/.exec(detail)
     if (minWd) return `Минимальный вывод — ${minWd[1]} монет.`
     return detail
@@ -90,7 +93,11 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return (await response.json()) as T
 }
 
-export type User = { id: number; email: string; mc_nick: string; balance: number; created_at: string; excluded_until: string | null }
+export type User = { id: number; email: string; mc_nick: string; balance: number; created_at: string; excluded_until: string | null; is_admin: boolean }
+
+export type GameConfig = { disabled_modes: string[]; max_bet: number | null }
+export type RuntimeConfig = { win_tiers: number[]; games: Record<string, GameConfig> }
+export type AdminConfig = { config: RuntimeConfig; games: { id: string; modes: string[]; max_bet: number }[] }
 
 export type Limits = {
   deposit_limit: number | null

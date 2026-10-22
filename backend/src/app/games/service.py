@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import runtime_config
 from app.config import Settings
 from app.games.base import Game, GameResult, InvalidAction
 from app.games.engine import finalize
@@ -82,12 +83,16 @@ async def start_round(
     mode: str | None = None,
 ) -> Round:
     game = _require_game(game_id)
+    config = (await runtime_config.load(session)).game(game_id)
     low = max(settings.min_bet, game.min_bet)
-    if not low <= bet <= settings.max_bet:
-        raise BetOutOfRange(f"Bet must be between {low} and {settings.max_bet}")
+    high = min(settings.max_bet, config.max_bet or settings.max_bet)
+    if not low <= bet <= high:
+        raise BetOutOfRange(f"Bet must be between {low} and {high}")
     if bet % game.bet_step:
         raise BetOutOfRange(f"Bet must be a multiple of {game.bet_step}")
 
+    if mode in config.disabled_modes:
+        raise BetOutOfRange(f"Mode '{mode}' is switched off")
     try:
         cost = game.cost(bet, mode)
     except InvalidAction as e:

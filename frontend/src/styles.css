@@ -364,3 +364,6 @@ tbody tr:last-child td { border-bottom: 0; }
 .reminder h2 { margin-bottom: 10px; }
 .reminder p { color: var(--ink-2); font-size: 15px; line-height: 1.5; margin: 0 0 16px; }
 .reminder-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.modes { border: 0; padding: 0; margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
+.modes legend { padding: 0; margin-bottom: 4px; }

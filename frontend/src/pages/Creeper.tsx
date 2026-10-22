@@ -85,7 +85,7 @@ export default function Creeper() {
         sfx.dynamite()
         setNote(`Порталы! ${fs.awarded} бесплатных вращений.`)
         await s.flashScatters()
-        await wait(900)
+        await s.bonus({ title: 'БОНУС!', sub: `${fs.awarded} БЕСПЛАТНЫХ ВРАЩЕНИЙ` })
         s.setFree(true)
         let of = fs.awarded
         let mult = 0
@@ -101,6 +101,7 @@ export default function Creeper() {
             sfx.dynamite()
             setNote(`Ещё ${sp.retrigger} вращений!`)
             await s.flashScatters()
+            await s.bonus({ title: 'ЕЩЁ!', sub: `+${sp.retrigger} ВРАЩЕНИЙ` })
           }
           setBonus({ n: i + 1, of, mult })
           setRunning(total)

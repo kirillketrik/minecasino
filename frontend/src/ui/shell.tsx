@@ -17,6 +17,8 @@ const NAV: { route: Route; label: string; icon: SpriteName }[] = [
   { route: 'limits', label: 'Лимиты', icon: 'stone' },
 ]
 
+const ADMIN_NAV: (typeof NAV)[number] = { route: 'admin', label: 'Админка', icon: 'redstone' }
+
 export function Mark() {
   return (
     <svg className="mark" viewBox="0 0 16 16" shapeRendering="crispEdges" aria-hidden="true">
@@ -37,7 +39,7 @@ export function Shell({ route, children }: { route: Route; children: ReactNode }
           <span className="wordmark">MineBet</span>
         </a>
         <nav aria-label="Разделы">
-          {NAV.map((item) => (
+          {[...NAV, ...(user?.is_admin ? [ADMIN_NAV] : [])].map((item) => (
             <a key={item.route} href={`#/${item.route}`} className="nav-item" aria-current={route === item.route ? 'page' : undefined}>
               <img src={dataUrl(item.icon, 2)} alt="" width={20} height={20} />
               {item.label}

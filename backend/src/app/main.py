@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, games, limits, wallet, ws
+from app.api import admin, auth, games, limits, wallet, ws
 from app.config import get_settings
 from app.games.catalog import register_all
 
@@ -19,6 +19,7 @@ def create_app() -> FastAPI:
     app.include_router(wallet.router, prefix="/api")
     app.include_router(limits.router, prefix="/api")
     app.include_router(games.router, prefix="/api")
+    app.include_router(admin.router, prefix="/api")
     app.include_router(ws.router, prefix="/api")
 
     @app.get("/api/health")

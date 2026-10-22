@@ -1,6 +1,8 @@
 import { Container, Graphics, Sprite, Text, TilingSprite } from 'pixi.js'
 import type { Application } from 'pixi.js'
 import { reducedMotion } from '../format.ts'
+import { bonusIntro } from './bonusFx.ts'
+import type { BonusIntro } from './bonusFx.ts'
 import { textureOf } from './sprites.ts'
 import type { SpriteName } from './sprites.ts'
 import { easeInOut, easeOut, easeOutBack, tween, wait } from './stage.tsx'
@@ -135,6 +137,11 @@ export class CreeperScene {
     for (const [c, r] of cells) {
       this.marks.rect(OX + c * PITCH - 3, OY + r * PITCH - 3, CELL + 6, CELL + 6).stroke({ width: 4, color })
     }
+  }
+
+  /** Full-field announcement of a won bonus. */
+  bonus(opts: Pick<BonusIntro, 'title' | 'sub'>) {
+    return bonusIntro(this.app, this.fx, CREEPER_W, CREEPER_H, { icon: 'portal', color: 0xc07cff, ...opts })
   }
 
   /** Free spins are played on a purple-tinted wall. */

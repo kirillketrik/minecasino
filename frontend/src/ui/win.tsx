@@ -1,24 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { api } from '../api.ts'
 import { coins } from '../format.ts'
 import { sfx } from '../game/sound.ts'
 import { speedFactor } from '../game/speed.ts'
 
 export type Tier = { id: number; name: string; from: number }
 
-// A win is judged by how many bets it is worth.
-export const TIERS: Tier[] = [
-  { id: 1, name: 'Хороший выигрыш', from: 5 },
-  { id: 2, name: 'Крупный выигрыш', from: 10 },
-  { id: 3, name: 'Огромный выигрыш', from: 25 },
-  { id: 4, name: 'Мега выигрыш', from: 50 },
-  { id: 5, name: 'Максимальный выигрыш', from: 100 },
-]
+export const TIER_NAMES = ['Хороший выигрыш', 'Крупный выигрыш', 'Огромный выигрыш', 'Мега выигрыш', 'Максимальный выигрыш']
+
+// A win is judged by how many bets it is worth. The thresholds are set by the admin; these are the
+// defaults used until the server's answer arrives.
+export const DEFAULT_THRESHOLDS = [10, 20, 40, 70, 100]
+let thresholds = DEFAULT_THRESHOLDS
+let loading: Promise<void> | null = null
+
+export const getTiers = (): Tier[] => TIER_NAMES.map((name, i) => ({ id: i + 1, name, from: thresholds[i] }))
+
+export function setThresholds(next: number[]) {
+  thresholds = next
+}
+
+function loadThresholds() {
+  loading ??= api<{ win_tiers: number[] }>('/config')
+    .then((c) => setThresholds(c.win_tiers))
+    .catch(() => {
+      loading = null
+    })
+  return loading
+}
 
 export function tierOf(win: number, bet: number): Tier | null {
   if (bet <= 0) return null
   const ratio = win / bet
   let found: Tier | null = null
-  for (const t of TIERS) if (ratio >= t.from) found = t
+  for (const t of getTiers()) if (ratio >= t.from) found = t
   return found
 }
 
@@ -27,6 +42,9 @@ type Shown = { tier: Tier; win: number; bet: number; key: number }
 export function useWinBanner() {
   const [shown, setShown] = useState<Shown | null>(null)
   const key = useRef(0)
+  useEffect(() => {
+    void loadThresholds()
+  }, [])
   const show = useCallback((win: number, bet: number) => {
     const tier = tierOf(win, bet)
     if (!tier) return false

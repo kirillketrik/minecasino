@@ -4,6 +4,7 @@ import { go, useRoute } from './route.ts'
 import Auth from './pages/Auth.tsx'
 import Creeper from './pages/Creeper.tsx'
 import Elytra from './pages/Elytra.tsx'
+import Admin from './pages/Admin.tsx'
 import History from './pages/History.tsx'
 import Limits from './pages/Limits.tsx'
 import Lobby from './pages/Lobby.tsx'
@@ -33,6 +34,7 @@ function Routes() {
     wallet: <Wallet />,
     history: <History />,
     limits: <Limits />,
+    admin: user.is_admin ? <Admin /> : <Lobby />,
     login: null,
     register: null,
   }[route]
