@@ -10,7 +10,7 @@ const spent = (r: RoundOut): number => r.view.cost ?? r.bet
 
 function outcome(r: RoundOut): string {
   if (!r.finished) return 'Не завершён'
-  const tag = r.view.mode === 'buy_bonus' ? 'Бонус куплен · ' : r.view.mode === 'scatter' ? 'Со скаттером · ' : ''
+  const tag = r.view.mode === 'buy_bonus' ? 'Бонус куплен · ' : r.view.mode === 'scatter' ? 'Со скаттером · ' : r.view.mode === 'ante' ? 'Повышенный шанс · ' : ''
   return tag + plainOutcome(r)
 }
 

@@ -146,3 +146,26 @@ test('limits: a loss limit refuses a bigger bet, self-exclusion blocks play', as
   await page.getByRole('button', { name: 'Да, заблокировать' }).click()
   await expect(page.getByText(/Игра и пополнение заблокированы до/).first()).toBeVisible()
 })
+
+test('creeper: ante raises the price of a spin', async ({ page }) => {
+  await register(page)
+  await page.goto('/#/creeper')
+  await page.getByRole('button', { name: 'Мин' }).click()
+  await page.getByRole('checkbox', { name: /Повышенный шанс бонуса/ }).check()
+  await expect(page.getByRole('button', { name: 'Крутить за 26' })).toBeVisible()
+})
+
+test('creeper: buy bonus plays free spins and records the price', async ({ page }) => {
+  await register(page)
+  await page.goto('/#/creeper')
+  await page.getByRole('button', { name: 'Турбо' }).click()
+  await page.getByRole('button', { name: 'Мин' }).click()
+  await page.getByRole('button', { name: /^Купить бонус за/ }).click()
+  await page.getByRole('button', { name: /^Купить за/ }).click()
+  await expect(page.getByText(/Бесплатные вращения \d+\/\d+/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: /^Крутить за/ })).toBeEnabled({ timeout: 120_000 })
+  await page.goto('/#/history')
+  const row = page.getByRole('row').nth(1)
+  await expect(row).toContainText('Бонус куплен')
+  await expect(row).toContainText('934')
+})

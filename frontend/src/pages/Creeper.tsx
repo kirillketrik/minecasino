@@ -1,159 +1,163 @@
-import { useEffect, useRef, useState } from 'react'
-import { ApiError, startRound } from '../api.ts'
-import { useAuth } from '../auth.tsx'
+import { useState } from 'react'
+import { startRound } from '../api.ts'
 import { coins } from '../format.ts'
 import { CREEPER_H, CREEPER_W, CreeperScene } from '../game/creeperScene.ts'
 import type { Wave } from '../game/creeperScene.ts'
 import { sfx } from '../game/sound.ts'
-import { PixiStage, wait } from '../game/stage.tsx'
-import { BetControl, useBet, useGameInfo } from '../ui/bet.tsx'
-import { AutoControl, SessionStats, SpeedControl, useAutoplay, useSession, useSpaceKey } from '../ui/play.tsx'
+import { wait } from '../game/stage.tsx'
+import { GameStage, SlotPanel, useScene, useSlot, useSlotLoop } from '../ui/game.tsx'
 import { CreeperRules } from '../ui/rules.tsx'
-import { useWinBanner } from '../ui/win.tsx'
 import { PageHead } from '../ui/shell.tsx'
 
+type Spin = {
+  grid: string[][]
+  final_grid: string[][]
+  waves: Wave[]
+  creeper_multiplier: number
+  win: number
+  scatters: number
+  retrigger?: number
+}
+
+const sameGrid = (a: string[][], b: string[][]) => JSON.stringify(a) === JSON.stringify(b)
+
 export default function Creeper() {
-  const { user, setBalance } = useAuth()
-  const info = useGameInfo('creeper')
-  const [bet, setBet] = useBet('creeper', info)
-  const scene = useRef<CreeperScene | null>(null)
-  const [ready, setReady] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState('Сделайте ставку и крутите.')
-  const [error, setError] = useState('')
-  const [running, setRunning] = useState<number | null>(null)
+  const slot = useSlot('creeper', 'ante')
+  const { bet, setBusy, setNote, setRunning, setError, fail, setBalance, session, banner, auto } = slot
+  const { scene, ready, onReady } = useScene(({ app, world }) => new CreeperScene(app, world))
   const [wave, setWave] = useState<{ n: number; mult: number } | null>(null)
   const [creeperMult, setCreeperMult] = useState<number | null>(null)
+  const [bonus, setBonus] = useState<{ n: number; of: number; mult: number } | null>(null)
 
-  const auto = useAutoplay()
-  const session = useSession()
-  const banner = useWinBanner()
+  /** One spin with all its cascades. `carried` is what the round has already won. Returns the new total. */
+  async function playSpin(s: CreeperScene, sp: Spin, carried: number, free: boolean, last: boolean, capped: boolean) {
+    sfx.spin()
+    await s.dropIn(sp.grid)
+    sfx.stop(3)
+    let total = 0
+    for (let i = 0; i < sp.waves.length; i++) {
+      const w = sp.waves[i]
+      const isLast = i === sp.waves.length - 1
+      const next: string[][] = isLast ? sp.final_grid : sp.waves[i + 1].grid
+      setWave({ n: i + 1, mult: w.multiplier })
+      setNote(
+        w.clusters.length === 1 ? `Кластер из ${w.clusters[0].count} блоков` : `Кластеров в волне: ${w.clusters.length}`,
+      )
+      total += w.win
+      setRunning(carried + total)
+      sfx.explode(i)
+      // The cap stopped the chain before this wave exploded: show it, do not drop new blocks.
+      await s.playWave(w, capped && last && isLast && sameGrid(next, w.grid) ? w.grid : next)
+    }
+    const mult = sp.creeper_multiplier
+    if (sp.waves.length > 0 && mult > 1) {
+      setCreeperMult(mult)
+      setNote(free ? `Множитель бонуса ×${mult}: выигрыш вращения ${coins(sp.win)}` : `Крипер: весь выигрыш ×${mult}`)
+      sfx.creeper()
+      await s.flashCreepers()
+      await wait(250)
+    }
+    setWave(null)
+    return carried + sp.win
+  }
 
-  const balance = user?.balance ?? 0
-
-  async function spin() {
+  async function spin(buy = false) {
+    slot.setConfirmBuy(false)
     const autoOn = auto.active
     setBusy(true)
     setError('')
     setRunning(null)
     setWave(null)
     setCreeperMult(null)
+    setBonus(null)
     const s = scene.current!
     try {
-      const r = await startRound('creeper', bet)
+      const r = await startRound('creeper', bet, slot.roundMode(buy))
       const v = r.view
+      const cost = (v.cost as number | undefined) ?? bet
       setBalance(r.balance - r.payout)
-      setNote('Блоки падают…')
-      sfx.spin()
-      await s.dropIn(v.grid)
-      sfx.stop(3)
-      const waves = v.waves as Wave[]
-      let total = 0
-      for (let i = 0; i < waves.length; i++) {
-        const w = waves[i]
-        const next: string[][] = i + 1 < waves.length ? waves[i + 1].grid : v.final_grid
-        setWave({ n: i + 1, mult: w.multiplier })
-        setNote(
-          w.clusters.length === 1
-            ? `Кластер из ${w.clusters[0].count} блоков`
-            : `Кластеров в волне: ${w.clusters.length}`,
-        )
-        total += w.win
-        sfx.explode(i)
-        setRunning(total)
-        if (v.capped && i === waves.length - 1) {
-          // The cap stopped the chain before this wave exploded: show it, do not drop new blocks.
-          await s.playWave(w, w.grid)
-        } else {
-          await s.playWave(w, next)
+      setNote(buy ? 'Бонус куплен. Порталы на поле…' : 'Блоки падают…')
+      const capped = Boolean(v.capped)
+      const fs = v.free_spins as { awarded: number; spins: Spin[] } | null
+
+      let total = await playSpin(s, v as Spin, 0, false, !fs, capped)
+      if (fs) {
+        sfx.dynamite()
+        setNote(`Порталы! ${fs.awarded} бесплатных вращений.`)
+        await s.flashScatters()
+        await wait(900)
+        s.setFree(true)
+        let of = fs.awarded
+        let mult = 0
+        for (let i = 0; i < fs.spins.length; i++) {
+          const sp = fs.spins[i]
+          setCreeperMult(null)
+          setNote(`Бонусное вращение ${i + 1}`)
+          setBonus({ n: i + 1, of, mult })
+          total = await playSpin(s, sp, total, true, i === fs.spins.length - 1, capped)
+          mult = sp.creeper_multiplier
+          if (sp.retrigger) {
+            of += sp.retrigger
+            sfx.dynamite()
+            setNote(`Ещё ${sp.retrigger} вращений!`)
+            await s.flashScatters()
+          }
+          setBonus({ n: i + 1, of, mult })
+          setRunning(total)
         }
-      }
-      const mult = v.creeper_multiplier as number
-      if (waves.length > 0 && mult > 1) {
-        setCreeperMult(mult)
-        setNote(`Крипер: весь выигрыш ×${mult}`)
-        sfx.creeper()
-        await s.flashCreepers()
-        await wait(250)
+        s.setFree(false)
+        setBonus(null)
+        setCreeperMult(null)
       }
       setRunning(r.payout > 0 ? r.payout : null)
       setBalance(r.balance)
       if (r.payout === 0) setNote('В этот раз без выигрыша.')
       else if (v.capped) setNote(`Достигнут лимит выигрыша — 100× ставки: ${coins(r.payout)}.`)
       else setNote(`Выигрыш ${coins(r.payout)}.`)
-      session.spin(bet, r.payout)
+      session.spin(cost, r.payout)
       if (r.payout > 0) banner.show(r.payout, bet)
       else sfx.lose()
-      if (autoOn) auto.report({ cost: bet, win: r.payout, bet, bonus: false })
+      if (autoOn) auto.report({ cost, win: r.payout, bet, bonus: Boolean(fs) })
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Что-то пошло не так.')
-      setBalance(user?.balance ?? 0)
+      fail(e)
+      setBalance(slot.balance)
       auto.stop('Автоспины остановлены из-за ошибки.')
+      scene.current?.setFree(false)
+      setBonus(null)
     } finally {
       setBusy(false)
     }
   }
 
-  useEffect(() => {
-    if (!auto.active || busy || !ready) return
-    if (bet > balance) {
-      auto.stop('Остановлено: не хватает монет.')
-      return
-    }
-    const t = setTimeout(() => void spin(), 300)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auto.active, auto.remaining, busy, ready])
-
-  useSpaceKey(() => void spin(), ready && !busy && !auto.active && bet <= balance && Boolean(info))
+  useSlotLoop(slot, ready, () => void spin())
 
   return (
     <>
-      <PageHead title="Крипер" sub="6×5. Восемь одинаковых блоков где угодно — взрыв и каскад." />
+      <PageHead title="Крипер" sub="6×5. Восемь одинаковых блоков где угодно — взрыв и каскад. Четыре портала — бесплатные вращения." />
       <div className="play">
-        <div className="play-stage">
-          <PixiStage
-            width={CREEPER_W}
-            height={CREEPER_H}
-            label="Игровое поле Крипера: шесть колонок по пять блоков"
-            onReady={({ app, world }) => {
-              const s = new CreeperScene(app, world)
-              scene.current = s
-              setReady(true)
-              return () => {
-                s.destroy()
-                scene.current = null
-              }
-            }}
-          />
-          {wave ? (
-            <div className="badge" role="status">
-              Волна {wave.n} · ×{wave.mult}
-              {creeperMult ? ` · Крипер ×${creeperMult}` : ''}
-            </div>
-          ) : null}
-          {banner.node}
-          <div className="stage-status" aria-live="polite">
-            <p className="status-line">{note}</p>
-            {running !== null ? (
-              <p className="win-total">
-                Выигрыш <strong>{coins(running)}</strong>
-              </p>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="play-panel">
-          <BetControl info={info} bet={bet} setBet={setBet} disabled={busy} balance={balance} />
-          <button type="button" className="btn btn-primary btn-wide btn-spin" disabled={busy || !info || bet > balance || !ready} onClick={() => void spin()}>
-            {busy ? 'Идёт раунд…' : 'Крутить'}
-          </button>
-          <AutoControl auto={auto} disabled={busy || bet > balance} hasBonus={false} />
-          <SpeedControl />
-          <SessionStats stats={session.stats} onReset={session.reset} />
-          {bet > balance && !busy ? <p className="form-error">Не хватает монет. <a href="#/wallet">Пополнить</a></p> : null}
-          {error ? <p className="form-error" role="alert">{error}</p> : null}
-        </div>
+        <GameStage
+          width={CREEPER_W}
+          height={CREEPER_H}
+          label="Игровое поле Крипера: шесть колонок по пять блоков"
+          onReady={onReady}
+          banner={banner.node}
+          badge={
+            bonus
+              ? `Бесплатные вращения ${bonus.n}/${bonus.of} · множитель ×${Math.max(1, bonus.mult)}`
+              : wave
+                ? `Волна ${wave.n} · ×${wave.mult}${creeperMult ? ` · Крипер ×${creeperMult}` : ''}`
+                : null
+          }
+          note={slot.note}
+          running={slot.running}
+        />
+        <SlotPanel
+          slot={slot}
+          ready={ready}
+          onSpin={(buy) => void spin(buy)}
+          modeTitle="Повышенный шанс бонуса"
+          buyHint="Четыре портала сразу и от 10 бесплатных вращений."
+        />
       </div>
 
       <CreeperRules />

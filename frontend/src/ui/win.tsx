@@ -35,11 +35,11 @@ export function useWinBanner() {
     return true
   }, [])
   const close = useCallback(() => setShown(null), [])
-  const node = shown ? <WinBanner {...shown} onClose={close} /> : null
+  const node = shown ? <WinBanner key={shown.key} tier={shown.tier} win={shown.win} bet={shown.bet} onClose={close} /> : null
   return { show, node }
 }
 
-function WinBanner({ tier, win, bet, onClose }: Shown & { onClose: () => void }) {
+function WinBanner({ tier, win, bet, onClose }: Omit<Shown, 'key'> & { onClose: () => void }) {
   const [value, setValue] = useState(0)
 
   useEffect(() => {

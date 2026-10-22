@@ -26,9 +26,9 @@ from dataclasses import dataclass
 from math import prod
 from typing import Any, ClassVar
 
-from app.games.base import MAX_WIN_MULTIPLIER, Game, GameResult, InvalidAction
-from app.games.engine import cap_payout
+from app.games.base import MAX_WIN_MULTIPLIER, GameResult, InvalidAction
 from app.games.rng import Rng, WeightedTable
+from app.games.slot import SlotGame, SpinOutcome
 
 COAL, IRON, GOLD, DIAMOND = "coal", "iron", "gold", "diamond"
 DYNAMITE = "dynamite"  # scatter
@@ -150,8 +150,9 @@ def can_gamble(pot: int, gambles: int, bet: int) -> bool:
     return gambles < MAX_GAMBLES and pot * 2 <= bet * MAX_WIN_MULTIPLIER
 
 
-class MinesGame(Game):
+class MinesGame(SlotGame):
     id: ClassVar[str] = "mines"
+    units_per_bet: ClassVar[int] = len(LINES)
     min_bet: ClassVar[int] = len(LINES)
     bet_step: ClassVar[int] = len(LINES)
 
@@ -166,9 +167,8 @@ class MinesGame(Game):
             if count_symbol(grid, DYNAMITE) >= min_scatters:
                 return grid
 
-    def start(self, bet: int, rng: Rng, mode: str | None = None) -> GameResult:
-        line_bet = bet // len(LINES)
-        cap = bet * MAX_WIN_MULTIPLIER
+    def spin(self, unit: int, rng: Rng, mode: str | None) -> SpinOutcome:
+        line_bet = unit
 
         grid = self._draw_grid(rng, MODE_MIN_SCATTERS.get(mode or "", 0))
         wins = evaluate(grid)
@@ -178,8 +178,6 @@ class MinesGame(Game):
             "wins": [w.view(line_bet) for w in wins],
             "base_win": total,
             "free_spins": None,
-            "mode": mode,
-            "cost": self.cost(bet, mode),
         }
 
         if count_symbol(grid, DYNAMITE) >= SCATTERS_FOR_BONUS:
@@ -199,20 +197,18 @@ class MinesGame(Game):
                 )
             view["free_spins"] = free
 
-        capped = total > cap
-        total = cap_payout(bet, total, MAX_WIN_MULTIPLIER)
-        view["total_win"] = total
-        if capped:
-            view["capped"] = True
+        return SpinOutcome(total, view)
 
-        if total == 0:
+    def settle(self, bet: int, payout: int, view: dict[str, Any]) -> GameResult:
+        """A win stays open: the player collects it or gambles it."""
+        if payout == 0:
             return GameResult(bet=bet, payout=0, finished=True, view=view)
         return GameResult(
             bet=bet,
             payout=0,
             finished=False,
-            state={"pot": total, "gambles": 0, "spin": view},
-            view={**view, **self._pending(total, 0, bet)},
+            state={"pot": payout, "gambles": 0, "spin": view},
+            view={**view, **self._pending(payout, 0, bet)},
         )
 
     @staticmethod

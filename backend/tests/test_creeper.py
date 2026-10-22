@@ -30,10 +30,10 @@ class Scripted(C.CreeperGame):
         self._start = grid
         self._fresh = iter(fresh)
 
-    def _draw_grid(self, rng):
+    def _draw_grid(self, rng, kind="base", force_scatters=0):
         return [list(col) for col in self._start]
 
-    def _draw_cell(self, rng):
+    def _draw_cell(self, rng, kind="base"):
         return next(self._fresh)
 
 
@@ -297,3 +297,144 @@ def test_a_dead_spin_still_shows_its_grid():
     result = Scripted(grid_from(cycle(C.PAYING, C.CELLS))).start(100, None)
     assert result.view["waves"] == [] and result.view["grid"] == result.view["final_grid"]
     assert len(result.view["grid"]) == C.COLS
+
+
+# --- portals, free spins and modes -------------------------------------------------------------
+
+
+def dead_grid(extra: dict[int, str] | None = None) -> C.Grid:
+    cells = cycle(C.PAYING, C.CELLS)
+    for index, cell in (extra or {}).items():
+        cells[index] = cell
+    return grid_from(cells)
+
+
+@pytest.mark.parametrize(
+    ("scatters", "spins"), [(0, 0), (3, 0), (4, 10), (5, 12), (6, 15), (9, 15)]
+)
+def test_free_spins_awarded(scatters, spins):
+    assert C.free_spins_awarded(scatters) == spins
+
+
+def test_portals_never_pay_or_explode_and_are_counted_when_they_land():
+    # Two portals dealt, one more drops in with the refill after the cluster explodes.
+    grid = one_cluster_grid({8: C.SCATTER, 9: C.SCATTER})
+    res = Scripted(grid, C.SCATTER, *C.PAYING).resolve(None)
+    assert res.scatters == 3
+    assert res.units == C.PAYTABLE[C.GUNPOWDER][0]
+    assert all(C.SCATTER in [c for col in w.grid for c in col] for w in res.waves)
+
+
+def test_free_spin_adds_creepers_to_the_sticky_multiplier_and_ignores_wave_multiplier():
+    fresh = [C.REDSTONE] * 8 + [C.GUNPOWDER] * 4 + [C.REDSTONE] * 4 + [C.LAPIS] * 4
+    grid = one_cluster_grid({10: "creeper:3"})
+    res = Scripted(grid, *fresh).resolve(None, kind="free", sticky=2)
+    assert [w.multiplier for w in res.waves] == [1, 1]
+    assert res.creeper_multiplier == 5
+    pay = C.PAYTABLE[C.GUNPOWDER][0] + C.PAYTABLE[C.REDSTONE][2]
+    assert res.units == pay * 5
+
+
+def test_free_spin_without_a_win_keeps_the_creepers_but_pays_nothing():
+    res = Scripted(dead_grid({0: "creeper:5"})).resolve(None, kind="free", sticky=3)
+    assert res.units == 0 and res.creeper_multiplier == 8
+
+
+def test_base_spin_win_with_no_creeper_is_not_multiplied():
+    res = Scripted(one_cluster_grid(), *C.PAYING).resolve(None)
+    assert res.creeper_multiplier == 1
+
+
+def test_bonus_plays_every_awarded_spin_and_sticky_multiplier_carries_over():
+    game = Scripted(dead_grid({0: "creeper:2"}))
+    bonus = game.play_bonus(None, 10)
+    assert len(bonus.spins) == 10 and bonus.retriggers == [0] * 10
+    assert [s.creeper_multiplier for s in bonus.spins] == [2 * i for i in range(1, 11)]
+    assert bonus.units == 0
+
+
+def test_three_portals_retrigger_but_the_bonus_has_a_hard_limit():
+    game = Scripted(dead_grid({0: C.SCATTER, 1: C.SCATTER, 2: C.SCATTER}))
+    bonus = game.play_bonus(None, 10)
+    assert len(bonus.spins) == C.MAX_FREE_SPINS
+    assert all(added == C.RETRIGGER_SPINS for added in bonus.retriggers)
+
+
+def test_four_portals_in_the_trigger_spin_start_the_bonus():
+    grid = dead_grid({i: C.SCATTER for i in range(4)})
+    result = Scripted(grid).start(100, None)
+    fs = result.view["free_spins"]
+    assert fs["awarded"] == 10 and len(fs["spins"]) >= 10
+    assert result.view["scatters"] == 4
+
+
+def test_three_portals_do_not_start_the_bonus():
+    grid = dead_grid({i: C.SCATTER for i in range(3)})
+    assert Scripted(grid).start(100, None).view["free_spins"] is None
+
+
+def test_mode_prices_and_cost():
+    game = C.CreeperGame()
+    assert game.modes == C.MODE_PRICES
+    assert game.cost(100, None) == 100
+    assert game.cost(100, C.ANTE_MODE) == 5 * C.MODE_PRICES[C.ANTE_MODE]
+    assert game.cost(100, C.BUY_BONUS_MODE) == 5 * C.MODE_PRICES[C.BUY_BONUS_MODE]
+
+
+def test_unknown_mode_is_refused():
+    with pytest.raises(Exception, match="unknown mode"):
+        C.CreeperGame().start(100, seeded_rng(1), "turbo")
+
+
+def test_bought_bonus_always_gives_free_spins_and_respects_the_cap():
+    game = C.CreeperGame()
+    rng = seeded_rng(5)
+    for _ in range(300):
+        result = game.start(100, rng, C.BUY_BONUS_MODE)
+        view = result.view
+        assert view["free_spins"] is not None and view["free_spins"]["awarded"] >= 10
+        assert view["mode"] == C.BUY_BONUS_MODE and view["cost"] == game.cost(100, C.BUY_BONUS_MODE)
+        assert result.payout <= 100 * 100
+        assert result.payout == min(view["base_win"] + view["free_spins"]["win"], 100 * 100)
+
+
+def test_ante_gives_portals_more_often():
+    game = C.CreeperGame()
+    base = ante = 0
+    for seed in range(6000):
+        base += game.play(seeded_rng(seed), None, record=False)[1] is not None
+        ante += game.play(seeded_rng(seed), C.ANTE_MODE, record=False)[1] is not None
+    assert ante > base * 1.5
+
+
+def test_bonus_view_shape():
+    result = C.CreeperGame().start(100, seeded_rng(9), C.BUY_BONUS_MODE)
+    spin = result.view["free_spins"]["spins"][0]
+    assert {
+        "grid",
+        "final_grid",
+        "waves",
+        "creepers",
+        "creeper_multiplier",
+        "win",
+        "retrigger",
+    } <= set(spin)
+
+
+async def test_ante_and_buy_are_listed_and_debited(
+    client: AsyncClient, auth: dict[str, str], app: FastAPI
+):
+    games = {g["id"]: g for g in (await client.get("/api/games")).json()}
+    assert games["creeper"]["modes"] == C.MODE_PRICES
+    app.dependency_overrides[get_rng] = lambda: seeded_rng(4)
+    r = await client.post(
+        "/api/games/creeper/rounds", json={"bet": 20, "mode": "ante"}, headers=auth
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["view"]["cost"] == C.MODE_PRICES[C.ANTE_MODE]
+    assert body["balance"] == 1000 - C.MODE_PRICES[C.ANTE_MODE] + body["payout"]
+    broke = await client.post(
+        "/api/games/creeper/rounds", json={"bet": 100, "mode": "buy_bonus"}, headers=auth
+    )
+    assert broke.status_code == 422

@@ -29,6 +29,7 @@ const SPRITE: Record<string, SpriteName> = {
   diamond: 'diamond',
   skull: 'skull',
   creeper: 'creeper',
+  scatter: 'portal',
 }
 
 export const isCreeper = (cell: string) => cell.startsWith('creeper')
@@ -61,6 +62,7 @@ export class CreeperScene {
   private layer = new Container()
   private fx = new Container()
   private marks = new Graphics()
+  private tint = new Graphics()
   private alive = true
 
   private app: Application
@@ -70,6 +72,9 @@ export class CreeperScene {
     const wall = new TilingSprite({ texture: textureOf('cave'), width: CREEPER_W, height: CREEPER_H })
     wall.tileScale.set(SCALE / 1.5)
     world.addChild(wall)
+    this.tint.rect(0, 0, CREEPER_W, CREEPER_H).fill({ color: 0x5b2a86, alpha: 0.32 })
+    this.tint.visible = false
+    world.addChild(this.tint)
     const frame = new Graphics()
       .rect(OX - 10, OY - 10, COLS * PITCH - GAP + 20, ROWS * PITCH - GAP + 20)
       .fill(0x101216)
@@ -132,12 +137,26 @@ export class CreeperScene {
     }
   }
 
+  /** Free spins are played on a purple-tinted wall. */
+  setFree(on: boolean) {
+    this.tint.visible = on
+  }
+
   /** Light up the creepers that landed, when their sum multiplies the total. */
-  async flashCreepers() {
+  flashCreepers() {
+    return this.pulse((cell) => isCreeper(cell), 0x7bf2a3)
+  }
+
+  /** Light up the portals that start or extend the free spins. */
+  flashScatters() {
+    return this.pulse((cell) => cell === 'scatter', 0xc07cff)
+  }
+
+  private async pulse(test: (cell: string) => boolean, color: number) {
     const hits: [number, number][] = []
-    this.cells.forEach((col, c) => col.forEach((_, r) => r >= 0 && this.isCreeperAt(c, r) && hits.push([c, r])))
+    this.cells.forEach((col, c) => col.forEach((_, r) => test(this.kinds[c]?.[r] ?? '') && hits.push([c, r])))
     if (!hits.length) return
-    this.mark(hits, 0x7bf2a3)
+    this.mark(hits, color)
     if (!reducedMotion()) {
       await tween(this.app, 420, (t) => {
         const k = 1 + Math.sin(t * Math.PI) * 0.18
@@ -148,9 +167,6 @@ export class CreeperScene {
   }
 
   private kinds: string[][] = []
-  private isCreeperAt(c: number, r: number) {
-    return isCreeper(this.kinds[c]?.[r] ?? '')
-  }
 
   /** Record what each cell is, so creepers can be found again after the grid moves. */
   remember(grid: string[][]) {

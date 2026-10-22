@@ -8,7 +8,7 @@ export type SpriteName =
   // Шахта
   | 'coal' | 'iron' | 'gold' | 'diamond' | 'pickaxe' | 'dynamite' | 'crystal-red' | 'crystal-blue'
   // Крипер
-  | 'gunpowder' | 'redstone' | 'lapis' | 'emerald' | 'skull' | 'creeper'
+  | 'gunpowder' | 'redstone' | 'lapis' | 'emerald' | 'skull' | 'creeper' | 'portal'
   // Элитры
   | 'elytra' | 'stone' | 'cave'
 
@@ -141,6 +141,15 @@ const builders: Record<SpriteName, () => HTMLCanvasElement> = {
       px(c, dark, 2, 10, 12, 2)
       px(c, '#e8f1de', 5, 10, 1, 2)
       px(c, '#e8f1de', 10, 10, 1, 2)
+    }),
+  // Original portal: dark frame around a purple field with lighter streaks.
+  portal: () =>
+    make((c) => {
+      const r = rng(131)
+      block(c, ['#2a1745', '#22123a', '#321d52'], '#120a22', r)
+      for (let y = 3; y < 13; y++)
+        for (let x = 3; x < 13; x++) px(c, ['#7a2fd6', '#8e46ea', '#6a22c2'][Math.floor(r() * 3)], x, y)
+      for (let i = 0; i < 9; i++) px(c, ['#d9a1ff', '#c07cff'][i % 2], 3 + Math.floor(r() * 9), 3 + Math.floor(r() * 9), 1, 1 + Math.floor(r() * 2))
     }),
   pickaxe: () =>
     bitmap(

@@ -1,32 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { ApiError, flightSocket, recentRounds, roundAction, session, startRound } from '../api.ts'
-import { useAuth } from '../auth.tsx'
+import { flightSocket, recentRounds, roundAction, session, startRound } from '../api.ts'
 import { coins } from '../format.ts'
 import { ELYTRA_H, ELYTRA_W, ElytraScene } from '../game/elytraScene.ts'
 import { sfx } from '../game/sound.ts'
-import { PixiStage } from '../game/stage.tsx'
-import { BetControl, useBet, useGameInfo } from '../ui/bet.tsx'
-import { SessionStats, useSession, useSpaceKey } from '../ui/play.tsx'
+import { BetControl } from '../ui/bet.tsx'
+import { GameStage, useGame, useScene } from '../ui/game.tsx'
+import { SessionStats, useSpaceKey } from '../ui/play.tsx'
 import { ElytraRules } from '../ui/rules.tsx'
-import { useWinBanner } from '../ui/win.tsx'
 import { PageHead } from '../ui/shell.tsx'
 
 type Flight = { id: number; bet: number; multiplier: number }
 
 export default function Elytra() {
-  const { user, setBalance } = useAuth()
-  const info = useGameInfo('elytra')
-  const [bet, setBet] = useBet('elytra', info)
-  const scene = useRef<ElytraScene | null>(null)
+  const { balance, setBalance, info, bet, setBet, error, setError, fail, session: stats, banner } = useGame('elytra')
+  const { scene, ready, onReady } = useScene(({ app, world }) => new ElytraScene(app, world))
   const socket = useRef<WebSocket | null>(null)
   const elapsed = useRef(0)
-  const [ready, setReady] = useState(false)
   const [starting, setStarting] = useState(false)
   const [flight, setFlight] = useState<Flight | null>(null)
   const [result, setResult] = useState('')
-  const [error, setError] = useState('')
-  const stats = useSession()
-  const banner = useWinBanner()
   const [target, setTarget] = useState(() => {
     try {
       return Number(localStorage.getItem('minebet.elytra.auto')) || 0
@@ -46,8 +38,6 @@ export default function Elytra() {
       /* not remembered */
     }
   }
-
-  const balance = user?.balance ?? 0
 
   function attach(id: number, stake: number) {
     socket.current?.close()
@@ -133,7 +123,7 @@ export default function Elytra() {
         attach(r.id, r.bet)
       }
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Не получилось взлететь.')
+      fail(e, 'Не получилось взлететь.')
       scene.current?.idle()
     } finally {
       setStarting(false)
@@ -152,7 +142,7 @@ export default function Elytra() {
       const r = await roundAction(flight.id, { type: 'cashout' })
       finish(r.view, r.payout, r.balance, flight.bet)
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Не получилось вывести.')
+      fail(e, 'Не получилось вывести.')
     }
   }
 
@@ -166,28 +156,14 @@ export default function Elytra() {
     <>
       <PageHead title="Элитры" sub="Забирайте выигрыш до того, как элитры сломаются." />
       <div className="play">
-        <div className="play-stage">
-          <PixiStage
-            width={ELYTRA_W}
-            height={ELYTRA_H}
-            label="График полёта: множитель растёт, пока элитры не сломаются"
-            onReady={({ app, world }) => {
-              const s = new ElytraScene(app, world)
-              scene.current = s
-              setReady(true)
-              return () => {
-                s.destroy()
-                scene.current = null
-              }
-            }}
-          />
-          {banner.node}
-          <div className="stage-status" aria-live="polite">
-            <p className="status-line">
-              {live ? `Ставка ${coins(flight.bet)}. Сейчас можно забрать ${coins(potential)}.` : result || 'Поставьте ставку и взлетайте.'}
-            </p>
-          </div>
-        </div>
+        <GameStage
+          width={ELYTRA_W}
+          height={ELYTRA_H}
+          label="График полёта: множитель растёт, пока элитры не сломаются"
+          onReady={onReady}
+          banner={banner.node}
+          note={live ? `Ставка ${coins(flight.bet)}. Сейчас можно забрать ${coins(potential)}.` : result || 'Поставьте ставку и взлетайте.'}
+        />
 
         <div className="play-panel">
           <BetControl info={info} bet={bet} setBet={setBet} disabled={live || starting} balance={balance} />

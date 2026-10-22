@@ -1,60 +1,25 @@
-import { useEffect, useRef, useState } from 'react'
-import { ApiError, recentRounds, roundAction, startRound } from '../api.ts'
+import { useEffect, useState } from 'react'
+import { recentRounds, roundAction, startRound } from '../api.ts'
 import type { View } from '../api.ts'
-import { useAuth } from '../auth.tsx'
 import { coins } from '../format.ts'
 import { MINES_H, MINES_W, MinesScene, winCells } from '../game/minesScene.ts'
 import type { Win } from '../game/minesScene.ts'
 import { dataUrl } from '../game/sprites.ts'
 import { sfx } from '../game/sound.ts'
-import { PixiStage, wait } from '../game/stage.tsx'
-import { BetControl, useBet, useGameInfo } from '../ui/bet.tsx'
-import { AutoControl, SessionStats, SpeedControl, useAutoplay, useSession, useSpaceKey } from '../ui/play.tsx'
+import { wait } from '../game/stage.tsx'
+import { GameStage, SlotPanel, useScene, useSlot, useSlotLoop } from '../ui/game.tsx'
 import { MinesRules } from '../ui/rules.tsx'
-import { useWinBanner } from '../ui/win.tsx'
 import { PageHead } from '../ui/shell.tsx'
 
 type Pending = { id: number; pot: number; canGamble: boolean; gambles: number }
 
 export default function Mines() {
-  const { user, setBalance } = useAuth()
-  const info = useGameInfo('mines')
-  const [bet, setBet] = useBet('mines', info)
-  const scene = useRef<MinesScene | null>(null)
-  const [ready, setReady] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState('Сделайте ставку и крутите.')
-  const [error, setError] = useState('')
-  const [running, setRunning] = useState<number | null>(null)
+  const slot = useSlot('mines', 'scatter')
+  const { bet, busy, setBusy, setNote, setRunning, setError, fail, setBalance, session, banner, auto } = slot
+  const { scene, ready, onReady } = useScene(({ app, world }) => new MinesScene(app, world))
   const [bonus, setBonus] = useState<{ n: number; mult: number } | null>(null)
   const [pending, setPending] = useState<Pending | null>(null)
-  const [scatter, setScatter] = useState(() => {
-    try {
-      return localStorage.getItem('minebet.mines.scatter') === '1'
-    } catch {
-      return false
-    }
-  })
-  const [confirmBuy, setConfirmBuy] = useState(false)
   const [crystal, setCrystal] = useState<{ pick: string; got: string } | null>(null)
-
-  const auto = useAutoplay()
-  const session = useSession()
-  const banner = useWinBanner()
-
-  const balance = user?.balance ?? 0
-  const scatterPrice = info?.modes.scatter ?? 0
-  const buyPrice = info?.modes.buy_bonus ?? 0
-  const spinCost = scatter && scatterPrice ? (bet / 20) * scatterPrice : bet
-  const buyCost = (bet / 20) * buyPrice
-  const toggleScatter = (on: boolean) => {
-    setScatter(on)
-    try {
-      localStorage.setItem('minebet.mines.scatter', on ? '1' : '0')
-    } catch {
-      /* preference is simply not remembered */
-    }
-  }
 
   // A win left uncollected in an earlier visit is shown, not hidden.
   useEffect(() => {
@@ -70,6 +35,7 @@ export default function Mines() {
         setNote('У вас есть невостребованный выигрыш. Заберите его или рискните.')
       })
       .catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready])
 
   async function play(view: View) {
@@ -112,8 +78,8 @@ export default function Mines() {
     if (view.capped) setNote('Достигнут лимит выигрыша — 100× ставки.')
   }
 
-  async function spin(mode?: 'buy_bonus') {
-    setConfirmBuy(false)
+  async function spin(buy = false) {
+    slot.setConfirmBuy(false)
     const autoOn = auto.active
     setBusy(true)
     setError('')
@@ -122,10 +88,9 @@ export default function Mines() {
     setPending(null)
     scene.current?.clearMarks()
     try {
-      const chosen = mode ?? (scatter ? 'scatter' : undefined)
-      const r = await startRound('mines', bet, chosen)
+      const r = await startRound('mines', bet, slot.roundMode(buy))
       setBalance(r.balance - r.payout)
-      setNote(mode ? 'Бонус куплен. Три динамита на поле…' : 'Крутим…')
+      setNote(buy ? 'Бонус куплен. Три динамита на поле…' : 'Крутим…')
       await play(r.view)
       const win = (r.view.total_win as number) ?? 0
       session.spin(r.view.cost as number, win)
@@ -145,7 +110,7 @@ export default function Mines() {
       }
       if (autoOn) auto.report({ cost: r.view.cost as number, win, bet, bonus: Boolean(r.view.free_spins) })
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Что-то пошло не так.')
+      fail(e)
       auto.stop('Автоспины остановлены из-за ошибки.')
     } finally {
       setBusy(false)
@@ -164,7 +129,7 @@ export default function Mines() {
       setRunning(null)
       scene.current?.clearMarks()
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Не получилось забрать выигрыш.')
+      fail(e, 'Не получилось забрать выигрыш.')
     } finally {
       setBusy(false)
     }
@@ -195,128 +160,69 @@ export default function Mines() {
         setPending({ id: r.id, pot: r.view.pending, canGamble: r.view.can_gamble, gambles: r.view.gambles })
       }
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Не получилось рискнуть.')
+      fail(e, 'Не получилось рискнуть.')
     } finally {
       setBusy(false)
     }
   }
 
-  useEffect(() => {
-    if (!auto.active || busy || !ready) return
-    if (spinCost > balance) {
-      auto.stop('Остановлено: не хватает монет.')
-      return
-    }
-    const t = setTimeout(() => void spin(), 300)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auto.active, auto.remaining, busy, ready])
-
-  useSpaceKey(() => void spin(), ready && !busy && !auto.active && !confirmBuy && spinCost <= balance && Boolean(info))
+  useSlotLoop(slot, ready, () => void spin())
 
   return (
     <>
       <PageHead title="Шахта" sub="5×3, 20 линий. Кирка — дикий символ, динамит — бонус." />
       <div className="play">
-        <div className="play-stage">
-          <PixiStage
-            width={MINES_W}
-            height={MINES_H}
-            label="Игровое поле Шахты: пять барабанов по три блока"
-            onReady={({ app, world }) => {
-              const s = new MinesScene(app, world)
-              scene.current = s
-              setReady(true)
-              return () => {
-                s.destroy()
-                scene.current = null
-              }
-            }}
-          />
-          {bonus ? (
-            <div className="badge" role="status">
-              Бонус {bonus.n}/10 · множитель ×{bonus.mult}
-            </div>
-          ) : null}
-          {banner.node}
-          <div className="stage-status" aria-live="polite">
-            <p className="status-line">{note}</p>
-            {running !== null ? (
-              <p className="win-total">
-                Выигрыш <strong>{coins(running)}</strong>
-              </p>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="play-panel">
-          {pending ? (
-            <section className="pending" aria-label="Невостребованный выигрыш">
-              <p className="pending-label">Ждёт выигрыш</p>
-              <p className="pending-pot">{coins(pending.pot)}</p>
-              <button type="button" className="btn btn-primary btn-wide" disabled={busy} onClick={() => void collect()}>
-                Забрать {coins(pending.pot)}
-              </button>
-              {pending.canGamble ? (
-                <div className="gamble">
-                  <p className="hint">Угадайте цвет кристалла: верно — выигрыш ×2, неверно — он сгорит. Шанс 50/50.</p>
-                  <div className="crystals">
-                    {(['red', 'blue'] as const).map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        className="crystal"
-                        disabled={busy}
-                        onClick={() => void gamble(c)}
-                        data-hit={crystal ? (crystal.got === c ? 'yes' : 'no') : undefined}
-                      >
-                        <img src={dataUrl(c === 'red' ? 'crystal-red' : 'crystal-blue', 5)} alt="" />
-                        {c === 'red' ? 'Красный' : 'Синий'}
-                      </button>
-                    ))}
+        <GameStage
+          width={MINES_W}
+          height={MINES_H}
+          label="Игровое поле Шахты: пять барабанов по три блока"
+          onReady={onReady}
+          banner={banner.node}
+          badge={bonus ? `Бонус ${bonus.n}/10 · множитель ×${bonus.mult}` : null}
+          note={slot.note}
+          running={slot.running}
+        />
+        <SlotPanel
+          slot={slot}
+          ready={ready}
+          onSpin={(buy) => void spin(buy)}
+          modeTitle="Гарантированный динамит на каждом спине"
+          buyHint="Три динамита сразу и 10 бесплатных спинов."
+          spinLabel={pending && !busy ? 'Забрать и крутить' : undefined}
+          above={
+            pending ? (
+              <section className="pending" aria-label="Невостребованный выигрыш">
+                <p className="pending-label">Ждёт выигрыш</p>
+                <p className="pending-pot">{coins(pending.pot)}</p>
+                <button type="button" className="btn btn-primary btn-wide" disabled={busy} onClick={() => void collect()}>
+                  Забрать {coins(pending.pot)}
+                </button>
+                {pending.canGamble ? (
+                  <div className="gamble">
+                    <p className="hint">Угадайте цвет кристалла: верно — выигрыш ×2, неверно — он сгорит. Шанс 50/50.</p>
+                    <div className="crystals">
+                      {(['red', 'blue'] as const).map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          className="crystal"
+                          disabled={busy}
+                          onClick={() => void gamble(c)}
+                          data-hit={crystal ? (crystal.got === c ? 'yes' : 'no') : undefined}
+                        >
+                          <img src={dataUrl(c === 'red' ? 'crystal-red' : 'crystal-blue', 5)} alt="" />
+                          {c === 'red' ? 'Красный' : 'Синий'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <p className="hint">Дальше рисковать нельзя: достигнут предел риска или лимит 100×.</p>
-              )}
-            </section>
-          ) : null}
-
-          <BetControl info={info} bet={bet} setBet={setBet} disabled={busy} balance={balance} />
-          {info && scatterPrice ? (
-            <label className="check mode">
-              <input type="checkbox" checked={scatter} disabled={busy} onChange={(e) => toggleScatter(e.target.checked)} />
-              <span>
-                Гарантированный динамит на каждом спине: ставка за спин {coins(spinCost)} (×{(scatterPrice / 20).toFixed(2)})
-              </span>
-            </label>
-          ) : null}
-          <button type="button" className="btn btn-primary btn-wide btn-spin" disabled={busy || !info || spinCost > balance || !ready} onClick={() => void spin()}>
-            {busy ? 'Идёт раунд…' : pending ? 'Забрать и крутить' : `Крутить за ${coins(spinCost)}`}
-          </button>
-          {info && buyPrice ? (
-            confirmBuy ? (
-              <div className="buy-confirm" role="group" aria-label="Подтверждение покупки бонуса">
-                <p className="hint">Три динамита сразу и 10 бесплатных спинов. Спишется {coins(buyCost)} монет. Максимальный выигрыш по-прежнему 100× ставки.</p>
-                <button type="button" className="btn btn-primary btn-wide" disabled={busy || buyCost > balance} onClick={() => void spin('buy_bonus')}>
-                  Купить за {coins(buyCost)}
-                </button>
-                <button type="button" className="btn btn-wide" onClick={() => setConfirmBuy(false)}>
-                  Отмена
-                </button>
-              </div>
-            ) : (
-              <button type="button" className="btn btn-wide" disabled={busy || !ready || buyCost > balance} onClick={() => setConfirmBuy(true)}>
-                Купить бонус за {coins(buyCost)}
-              </button>
-            )
-          ) : null}
-          <AutoControl auto={auto} disabled={busy || spinCost > balance} hasBonus />
-          <SpeedControl />
-          <SessionStats stats={session.stats} onReset={session.reset} />
-          {spinCost > balance && !busy ? <p className="form-error">Не хватает монет. <a href="#/wallet">Пополнить</a></p> : null}
-          {error ? <p className="form-error" role="alert">{error}</p> : null}
-        </div>
+                ) : (
+                  <p className="hint">Дальше рисковать нельзя: достигнут предел риска или лимит 100×.</p>
+                )}
+              </section>
+            ) : null
+          }
+        />
       </div>
 
       <MinesRules />
