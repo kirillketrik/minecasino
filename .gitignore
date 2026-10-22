@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.db
+.env
+node_modules/
+dist/
+.taste-skill/
+
+test-results/
+playwright-report/
+.claude/settings.local.json
+*.log
