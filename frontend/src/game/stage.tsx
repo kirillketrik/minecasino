@@ -67,7 +67,7 @@ export function PixiStage({ width, height, label, onReady }: Props) {
     <div
       ref={host}
       className="stage"
-      style={{ aspectRatio: `${width} / ${height}` }}
+      style={{ aspectRatio: `${width} / ${height}`, ["--ar" as string]: width / height }}
       role="img"
       aria-label={label}
     />

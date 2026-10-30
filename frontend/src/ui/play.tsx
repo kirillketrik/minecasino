@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { coins, signed } from '../format.ts'
-import { setSound, sfx, useSound } from '../game/sound.ts'
 import { SPEEDS, setSpeed, useSpeed } from '../game/speed.ts'
 
 // --- animation speed -----------------------------------------------------------------------------
 
 export function SpeedControl() {
   const speed = useSpeed()
-  const sound = useSound()
   return (
     <div className="tool" role="group" aria-label="Скорость вращения">
       <span className="tool-label">Скорость</span>
@@ -17,17 +15,6 @@ export function SpeedControl() {
             {s.label}
           </button>
         ))}
-        <button
-          type="button"
-          className="chip"
-          aria-pressed={sound}
-          onClick={() => {
-            setSound(!sound)
-            if (!sound) sfx.click()
-          }}
-        >
-          Звук: {sound ? 'вкл' : 'выкл'}
-        </button>
       </div>
     </div>
   )

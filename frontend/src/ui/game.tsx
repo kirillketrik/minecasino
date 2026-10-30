@@ -9,6 +9,8 @@ import type { ReactNode } from 'react'
 import { ApiError } from '../api.ts'
 import { useAuth } from '../auth.tsx'
 import { coins } from '../format.ts'
+import { enterTheme, leaveTheme, setMusic, setSound, sfx, useMusic, useSound } from '../game/sound.ts'
+import type { Theme } from '../game/sound.ts'
 import { PixiStage } from '../game/stage.tsx'
 import type { StageContext } from '../game/stage.tsx'
 import { BetControl, useBet, useGameInfo } from './bet.tsx'
@@ -40,7 +42,15 @@ export function usePersistedFlag(key: string): [boolean, (on: boolean) => void] 
   return [on, set]
 }
 
+const THEMES: Record<string, Theme> = { mines: 'mines', creeper: 'creeper', ender: 'ender', drill: 'drill', elytra: 'elytra' }
+
 export function useGame(id: string) {
+  useEffect(() => {
+    const theme = THEMES[id]
+    if (!theme) return
+    enterTheme(theme)
+    return () => leaveTheme(theme)
+  }, [id])
   const { user, setBalance } = useAuth()
   const info = useGameInfo(id)
   const [bet, setBet] = useBet(id, info)
@@ -84,10 +94,61 @@ type StageProps = {
   running?: number | null
 }
 
-export function GameStage({ width, height, label, onReady, banner, badge, note, running }: StageProps) {
+const ICONS = {
+  sound: 'M3 9v6h4l5 4V5L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z',
+  mute: 'M3 9v6h4l5 4V5L7 9H3zm13.6 3 2.4-2.4-1.4-1.4-2.4 2.4-2.4-2.4-1.4 1.4 2.4 2.4-2.4 2.4 1.4 1.4 2.4-2.4 2.4 2.4 1.4-1.4-2.4-2.4z',
+  music: 'M12 3v10.6A4 4 0 1 0 14 17V7h4V3h-6z',
+  musicOff: 'M12 3v10.6A4 4 0 1 0 14 17V7h4V3h-6zM3 4.4 4.4 3 21 19.6 19.6 21 3 4.4z',
+  expand: 'M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z',
+  shrink: 'M8 4h2v6H4V8h4V4zm6 0h2v4h4v2h-6V4zM4 14h6v6H8v-4H4v-2zm10 0h6v2h-4v4h-2v-6z',
+}
+
+function Icon({ d }: { d: string }) {
   return (
-    <div className="play-stage">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
+      <path d={d} />
+    </svg>
+  )
+}
+
+/** Sound, music and full screen, in the corner of the stage. */
+function StageTools({ target }: { target: React.RefObject<HTMLDivElement | null> }) {
+  const sound = useSound()
+  const music = useMusic()
+  const [full, setFull] = useState(false)
+  useEffect(() => {
+    const change = () => setFull(document.fullscreenElement === target.current)
+    document.addEventListener('fullscreenchange', change)
+    return () => document.removeEventListener('fullscreenchange', change)
+  }, [target])
+  const toggleFull = () => {
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void target.current?.requestFullscreen?.().catch(() => undefined)
+  }
+  const canFull = typeof document !== 'undefined' && document.fullscreenEnabled
+  return (
+    <div className="stage-tools" role="group" aria-label="Звук и экран">
+      <button type="button" className="tool-btn" aria-pressed={sound} aria-label="Звуки" title={sound ? 'Выключить звуки' : 'Включить звуки'} onClick={() => { setSound(!sound); if (!sound) sfx.click() }}>
+        <Icon d={sound ? ICONS.sound : ICONS.mute} />
+      </button>
+      <button type="button" className="tool-btn" aria-pressed={music} aria-label="Музыка" title={music ? 'Выключить музыку' : 'Включить музыку'} onClick={() => setMusic(!music)}>
+        <Icon d={music ? ICONS.music : ICONS.musicOff} />
+      </button>
+      {canFull ? (
+        <button type="button" className="tool-btn" aria-pressed={full} aria-label="Во весь экран" title={full ? 'Выйти из полноэкранного режима' : 'Во весь экран'} onClick={toggleFull}>
+          <Icon d={full ? ICONS.shrink : ICONS.expand} />
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+export function GameStage({ width, height, label, onReady, banner, badge, note, running }: StageProps) {
+  const box = useRef<HTMLDivElement>(null)
+  return (
+    <div className="play-stage" ref={box}>
       <PixiStage width={width} height={height} label={label} onReady={onReady} />
+      <StageTools target={box} />
       {badge ? (
         <div className="badge" role="status">
           {badge}

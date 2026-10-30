@@ -61,7 +61,7 @@ export default function Drill() {
         await s.play(step)
         opened += step.opened.length
         total += gained + step.opened.reduce((sum, c) => sum + Math.round(c.prize * k), 0)
-        if (step.opened.length) sfx.dynamite()
+        if (step.opened.length) sfx.chest()
         setRunning(total)
       }
       setBadge(null)
