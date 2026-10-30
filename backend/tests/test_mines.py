@@ -132,7 +132,7 @@ def test_trigger_probability_matches_enumeration():
 
 
 def test_free_spin_multipliers_ramp_from_2_to_10():
-    assert FREE_SPIN_MULTIPLIERS == (2, 3, 4, 5, 6, 7, 8, 9, 10, 10)
+    assert FREE_SPIN_MULTIPLIERS == (2, 3, 4, 5, 6, 7, 8, 9, 9, 9)
 
 
 def test_theoretical_rtp_is_calibrated():
@@ -176,6 +176,23 @@ def test_three_scatters_trigger_ten_free_spins_with_rising_multiplier():
     assert [s["multiplier"] for s in spins] == list(FREE_SPIN_MULTIPLIERS)
     assert [s["win"] for s in spins] == [300 * m for m in FREE_SPIN_MULTIPLIERS]
     assert result.view["base_win"] == 0
+
+
+def test_scatters_inside_free_spins_retrigger_five_more_at_a_flat_multiplier():
+    # Spin 3 (index 2) shows three Dynamite: five spins are added after the ten.
+    grids = [full(COAL)] * 15
+    grids[2] = with_scatters(3)
+    result = Scripted(with_scatters(3), *grids).start(20, None)
+    spins = result.view["free_spins"]
+    assert len(spins) == 15
+    assert [s["retrigger"] for s in spins].count(5) == 1 and spins[2]["retrigger"] == 5
+    assert [s["multiplier"] for s in spins[10:]] == [mines.RETRIGGER_MULTIPLIER] * 5
+
+
+def test_retriggers_stop_at_thirty_spins():
+    grids = [with_scatters(3)] * 40
+    result = Scripted(with_scatters(3), *grids).start(20, None)
+    assert len(result.view["free_spins"]) == mines.MAX_FREE_SPINS
 
 
 def test_two_scatters_do_not_trigger():
@@ -366,7 +383,7 @@ def test_buy_bonus_always_starts_free_spins():
     game, rng = MinesGame(), seeded_rng(7)
     for _ in range(20):
         view = game.start(100, rng, "buy_bonus").view
-        assert view["free_spins"] is not None and len(view["free_spins"]) == 10
+        assert view["free_spins"] is not None and len(view["free_spins"]) >= 10
         assert view["mode"] == "buy_bonus" and view["cost"] == game.cost(100, "buy_bonus")
 
 

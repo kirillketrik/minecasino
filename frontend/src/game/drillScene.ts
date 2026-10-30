@@ -4,6 +4,7 @@ import { coins, reducedMotion } from '../format.ts'
 import { textureOf } from './sprites.ts'
 import type { SpriteName } from './sprites.ts'
 import { Fx, bevel, depthWash, glow, shadow } from './fx.ts'
+import { bonusIntro } from './bonusFx.ts'
 import { easeInOut, easeOut, easeOutBack, tween, wait } from './stage.tsx'
 
 export const DRILL_COLS = 5
@@ -331,6 +332,14 @@ export class DrillScene {
     this.depth.layer.addChildAt(beam, 0)
     void tween(this.app, 900, (t) => (beam.alpha = 1 - t), easeOut).then(() => beam.destroy())
     await this.popup(col, chestY() - 4, `+${coins(prize)}`, grand ? 0xffd34d : 0xfff0a0)
+  }
+
+  /** Gold rush: three chests are open, everything dug so far pays twice. */
+  rush() {
+    this.depth.flash(0xffd34d, 0.35, 320)
+    this.depth.shake(5, 480)
+    this.depth.ring(DRILL_W / 2, DRILL_H / 2, 0xffd34d, 260)
+    return bonusIntro(this.app, this.fx, DRILL_W, DRILL_H, { icon: 'chestopen', color: 0xffd34d, title: 'ЗОЛОТАЯ ЛИХОРАДКА', sub: 'ДОБЫЧА ×2' })
   }
 
   /** Mark the main chest by a gold frame so the player knows what they dig toward. */

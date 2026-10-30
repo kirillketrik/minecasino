@@ -5,7 +5,8 @@ Rules
 - A line pays left to right from reel 1 for 3, 4 or 5 matching symbols; Pickaxe (wild, reels 2-5)
   substitutes for any paying symbol. Dynamite never substitutes and breaks a line.
 - 3+ Dynamite anywhere starts 10 free spins resolved in the same round. Spin k wins are
-  multiplied by min(10, 2 + k): x2, x3 ... x10, x10.
+  multiplied by min(9, 2 + k): x2, x3 ... x9, x9, x9. 3+ Dynamite inside a free spin retrigger: 5
+  more spins at a flat x6, up to 30 free spins in all.
 - Any win leaves the round open so the player can collect or gamble it: guess the crystal colour,
   right doubles the pot, wrong burns it. The next round started by the player collects it.
 - Modes (price in 1/20 of the bet): `scatter` forces at least one Dynamite onto the first spin,
@@ -80,15 +81,26 @@ PAYTABLE: dict[str, dict[int, int]] = {
 }
 
 FREE_SPINS = 10
-FREE_SPIN_MULTIPLIERS = tuple(min(10, 2 + k) for k in range(FREE_SPINS))
+FREE_SPIN_MULTIPLIERS = tuple(min(9, 2 + k) for k in range(FREE_SPINS))
+# Retrigger: 3+ Dynamite inside a free spin add spins (up to MAX_FREE_SPINS in all), at a flat x6.
+RETRIGGER_SPINS = 5
+MAX_FREE_SPINS = 30
+RETRIGGER_MULTIPLIER = 6
+
+
+def free_multiplier(index: int) -> int:
+    """Multiplier of free spin number `index` (0-based): the ladder, then flat for added spins."""
+    return FREE_SPIN_MULTIPLIERS[index] if index < FREE_SPINS else RETRIGGER_MULTIPLIER
+
+
 SCATTERS_FOR_BONUS = 3
 MAX_GAMBLES = 5
 CRYSTALS = ("red", "blue")
 
 SCATTER_MODE, BUY_BONUS_MODE = "scatter", "buy_bonus"
 # Cost in 1/20 of the bet. Bet is a multiple of 20, so the cost is always a whole number of coins.
-# Measured with scripts/calibrate_mines_modes.py (80k rounds): scatter 94.8%, buy_bonus 95.8%.
-MODE_PRICES: dict[str, int] = {SCATTER_MODE: 29, BUY_BONUS_MODE: 910}
+# Measured with scripts/calibrate_mines_modes.py (80k rounds): scatter 94.8%, buy_bonus ~96%.
+MODE_PRICES: dict[str, int] = {SCATTER_MODE: 29, BUY_BONUS_MODE: 905}
 MODE_MIN_SCATTERS: dict[str, int] = {SCATTER_MODE: 1, BUY_BONUS_MODE: SCATTERS_FOR_BONUS}
 
 Grid = list[list[str]]  # grid[reel][row]
@@ -182,19 +194,30 @@ class MinesGame(SlotGame):
 
         if count_symbol(grid, DYNAMITE) >= SCATTERS_FOR_BONUS:
             free = []
-            for multiplier in FREE_SPIN_MULTIPLIERS:
+            scheduled, index = FREE_SPINS, 0
+            while index < scheduled:
+                multiplier = free_multiplier(index)
                 fs_grid = self._draw_grid(rng)
                 fs_wins = evaluate(fs_grid)
                 win = sum(w.units for w in fs_wins) * line_bet * multiplier
                 total += win
+                added = 0
+                if (
+                    count_symbol(fs_grid, DYNAMITE) >= SCATTERS_FOR_BONUS
+                    and scheduled + RETRIGGER_SPINS <= MAX_FREE_SPINS
+                ):
+                    added = RETRIGGER_SPINS
+                    scheduled += added
                 free.append(
                     {
                         "grid": fs_grid,
                         "wins": [w.view(line_bet, multiplier) for w in fs_wins],
                         "multiplier": multiplier,
                         "win": win,
+                        "retrigger": added,
                     }
                 )
+                index += 1
             view["free_spins"] = free
 
         return SpinOutcome(total, view)
@@ -305,4 +328,19 @@ def trigger_probability() -> float:
 
 def theoretical_rtp() -> float:
     """Exact RTP ignoring the 100x cap (which only lowers it)."""
-    return base_rtp() * (1 + trigger_probability() * sum(FREE_SPIN_MULTIPLIERS))
+    t = trigger_probability()
+    # Expected sum of free-spin multipliers: walk the spins, tracking how many are scheduled.
+    dist = {FREE_SPINS: 1.0}
+    expected = 0.0
+    for k in range(MAX_FREE_SPINS):
+        nxt: dict[int, float] = {}
+        for scheduled, p in dist.items():
+            if k >= scheduled:
+                continue
+            expected += p * free_multiplier(k)
+            more = scheduled + RETRIGGER_SPINS
+            grown = more if more <= MAX_FREE_SPINS else scheduled
+            nxt[grown] = nxt.get(grown, 0.0) + p * t
+            nxt[scheduled] = nxt.get(scheduled, 0.0) + p * (1 - t)
+        dist = nxt
+    return base_rtp() * (1 + t * expected)

@@ -12,6 +12,7 @@ Rules
   Tools act from left to right, each on the mine as the previous ones left it.
 - Every broken block pays its value. A chest opens as soon as nothing is left above it and pays
   its prize; one of the five chests is the main one with a much bigger prize.
+- Gold rush: when three or more chests open in one spin, everything the tools broke pays twice.
 - If all five chests are open the whole spin pays x2 (astronomically rare, a pure jackpot).
 - One extra way to play (`modes`): an ante bet that makes tools more frequent.
 
@@ -101,6 +102,8 @@ ANTE_TOOL_WEIGHTS: dict[str, int] = {**TOOL_WEIGHTS, NONE: 18}
 CHEST_PRIZES: dict[int, int] = {20: 48, 40: 32, 100: 14, 200: 5, 400: 1}
 GRAND_PRIZES: dict[int, int] = {200: 50, 400: 32, 1000: 14, 2000: 4}
 CLEARED_MULTIPLIER = 2
+RUSH_CHESTS = 3  # chests open in one spin that start the gold rush
+RUSH_MULTIPLIER = 2  # applied to the blocks the tools broke
 
 ANTE_MODE = "ante"
 # Price in 1/20 of the bet, measured with scripts/measure_rtp.py so the mode also returns 96%.
@@ -127,8 +130,9 @@ class Dig:
     chests: list[int]  # prize of each chest, in 1/20 bet
     grand: int  # column of the main chest
     opened: list[int]  # columns whose chest opened, in order
-    block_units: int
+    block_units: int  # includes the gold rush bonus
     chest_units: int
+    rush: int  # extra block units the gold rush added, 0 when it did not start
     cleared: bool
     units: int  # whole spin in 1/20 bet, before the cap
 
@@ -225,12 +229,24 @@ class DrillGame(SlotGame):
             block_units += units
             chest_units += sum(chests[c] for c in fresh)
             steps.append(Step(col, tool, impact, broken, units, fresh))
+        rush = block_units * (RUSH_MULTIPLIER - 1) if len(opened) >= RUSH_CHESTS else 0
+        block_units += rush
         cleared = len(opened) == COLS
         total = block_units + chest_units
         if cleared:
             total *= CLEARED_MULTIPLIER
         return Dig(
-            dealt, tools, steps, chests, grand, opened, block_units, chest_units, cleared, total
+            dealt,
+            tools,
+            steps,
+            chests,
+            grand,
+            opened,
+            block_units,
+            chest_units,
+            rush,
+            cleared,
+            total,
         )
 
     def spin(self, unit: int, rng: Rng, mode: str | None, tuning: Tuning) -> SpinOutcome:
@@ -257,6 +273,7 @@ class DrillGame(SlotGame):
             ],
             "block_win": dig.block_units * unit,
             "chest_win": dig.chest_units * unit,
+            "rush_win": dig.rush * unit,
             "cleared": dig.cleared,
             "multiplier": CLEARED_MULTIPLIER if dig.cleared else 1,
             "win": dig.units * unit,

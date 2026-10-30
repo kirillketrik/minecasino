@@ -54,7 +54,7 @@ export default function Ender() {
       setRunning(carried + total)
       sfx.explode(i)
       // The cap stopped the chain before this wave vanished: show it, do not drop new blocks.
-      await s.playWave({ ...w, multiplier: 1 }, capped && last && isLast && sameGrid(next, w.grid) ? w.grid : next)
+      await s.playWave({ ...w, multiplier: 1 }, capped && last && isLast && sameGrid(next, w.grid) ? w.grid : next, i)
     }
     const mult = sp.multiplier
     if (sp.waves.length > 0 && mult > 1) {
@@ -68,6 +68,13 @@ export default function Ender() {
       setNote(`Кристаллы Края платят сами: ${coins(Math.round(sp.scatter_win * k))}`)
       sfx.dynamite()
       await s.flashScatters()
+    }
+    if (!free && last && sp.scatters === 3) {
+      // One short of the bonus: tease it.
+      setNote('Совсем чуть-чуть: не хватило одного кристалла до бонуса!')
+      sfx.lose()
+      await s.flashScatters()
+      await wait(200)
     }
     setWave(null)
     return carried + Math.round(sp.win * k)

@@ -15,6 +15,7 @@ type DrillView = {
   steps: DrillStep[]
   chests: DrillChest[]
   cleared: boolean
+  rush_win?: number
   win: number
 }
 
@@ -65,6 +66,13 @@ export default function Drill() {
         setRunning(total)
       }
       setBadge(null)
+      if (v.rush_win) {
+        sfx.fanfare(3)
+        setNote('Золотая лихорадка: три сундука открыты, вся добыча ×2!')
+        await s.rush()
+        total += Math.round(v.rush_win * k)
+        setRunning(total)
+      }
       if (v.cleared) setNote('Шахта пройдена до конца: выигрыш ×2!')
       setRunning(r.payout > 0 ? r.payout : null)
       setBalance(r.balance)

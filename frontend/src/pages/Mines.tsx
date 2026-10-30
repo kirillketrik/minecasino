@@ -17,7 +17,7 @@ export default function Mines() {
   const slot = useSlot('mines', 'scatter')
   const { info, bet, busy, setBusy, setNote, setRunning, setError, fail, setBalance, session, banner, auto } = slot
   const { scene, ready, onReady } = useScene(({ app, world }) => new MinesScene(app, world))
-  const [bonus, setBonus] = useState<{ n: number; mult: number } | null>(null)
+  const [bonus, setBonus] = useState<{ n: number; of: number; mult: number } | null>(null)
   const [pending, setPending] = useState<Pending | null>(null)
   const [crystal, setCrystal] = useState<{ pick: string; got: string } | null>(null)
 
@@ -59,9 +59,10 @@ export default function Mines() {
       s.highlight(winCells([]))
       await s.bonus({ title: 'БОНУС!', sub: '10 БЕСПЛАТНЫХ СПИНОВ' })
       let total: number = Math.round(view.base_win * k)
+      let of = 10
       for (let i = 0; i < view.free_spins.length; i++) {
         const fs = view.free_spins[i]
-        setBonus({ n: i + 1, mult: fs.multiplier })
+        setBonus({ n: i + 1, of, mult: fs.multiplier })
         sfx.spin()
         await s.spin(fs.grid, true)
         if (fs.wins.length) {
@@ -73,9 +74,33 @@ export default function Mines() {
         } else {
           await wait(260)
         }
+        if (fs.retrigger) {
+          // Three dynamite inside the bonus: light them up and add the spins.
+          of += fs.retrigger
+          const sticks: [number, number][] = []
+          fs.grid.forEach((col: string[], r: number) => col.forEach((sym: string, row: number) => sym === 'dynamite' && sticks.push([r, row])))
+          sfx.dynamite()
+          setNote(`Ещё ${fs.retrigger} бесплатных спинов!`)
+          s.highlight(sticks)
+          await wait(500)
+          await s.bonus({ title: 'ЕЩЁ!', sub: `+${fs.retrigger} СПИНОВ · ×6` })
+          s.clearMarks()
+          setBonus({ n: i + 1, of, mult: fs.multiplier })
+        }
       }
       setBonus(null)
       setRunning(view.total_win)
+    }
+    else {
+      // Two dynamite on the grid: one short of the bonus, tease it.
+      const sticks: [number, number][] = []
+      view.grid.forEach((col: string[], r: number) => col.forEach((sym: string, row: number) => sym === 'dynamite' && sticks.push([r, row])))
+      if (sticks.length === 2) {
+        setNote('Два динамита — не хватило одного до бонуса!')
+        s.highlight(sticks)
+        sfx.lose()
+        await wait(700)
+      }
     }
     s.clearMarks()
     if (view.capped) setNote(`Достигнут лимит выигрыша — ${info?.max_win_multiplier ?? 100}× ставки.`)
@@ -181,7 +206,7 @@ export default function Mines() {
           label="Игровое поле Шахты: пять барабанов по три блока"
           onReady={onReady}
           banner={banner.node}
-          badge={bonus ? `Бонус ${bonus.n}/10 · множитель ×${bonus.mult}` : null}
+          badge={bonus ? `Бонус ${bonus.n}/${bonus.of} · множитель ×${bonus.mult}` : null}
           note={slot.note}
           running={slot.running}
         />

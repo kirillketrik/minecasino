@@ -47,7 +47,7 @@ export default function Creeper() {
       setRunning(carried + total)
       sfx.explode(i)
       // The cap stopped the chain before this wave exploded: show it, do not drop new blocks.
-      await s.playWave(w, capped && last && isLast && sameGrid(next, w.grid) ? w.grid : next)
+      await s.playWave(w, capped && last && isLast && sameGrid(next, w.grid) ? w.grid : next, i)
     }
     const mult = sp.creeper_multiplier
     if (sp.waves.length > 0 && mult > 1) {
@@ -56,6 +56,13 @@ export default function Creeper() {
       sfx.creeper()
       await s.flashMultipliers()
       await wait(250)
+    }
+    if (!free && last && sp.scatters === 3) {
+      // One short of the bonus: tease it.
+      setNote('Совсем чуть-чуть: не хватило одного портала до бонуса!')
+      sfx.lose()
+      await s.flashScatters()
+      await wait(200)
     }
     setWave(null)
     return carried + Math.round(sp.win * k)

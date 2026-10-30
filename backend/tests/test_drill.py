@@ -171,3 +171,19 @@ async def test_drill_is_listed_and_plays(client: AsyncClient, auth: dict[str, st
     assert r.status_code == 201
     body = r.json()
     assert body["finished"] and body["payout"] == body["view"]["total_win"]
+
+
+def test_gold_rush_doubles_blocks_when_three_chests_open():
+    chests = [10, 20, 30, 40, 50]
+    dig = Scripted(plain_mine(), tools(c0=D.DRILL, c1=D.DRILL, c2=D.DRILL), chests, grand=4).dig(
+        seeded_rng(1)
+    )
+    plain = sum(D.BLOCK_VALUE[b] for step in dig.steps for _, _, b in step.broken)
+    assert len(dig.opened) == 3 and dig.rush == plain
+    assert dig.block_units == plain * D.RUSH_MULTIPLIER
+    assert dig.units == dig.block_units + 10 + 20 + 30
+
+
+def test_no_gold_rush_below_three_chests():
+    dig = Scripted(plain_mine(), tools(c0=D.DRILL, c1=D.DRILL)).dig(seeded_rng(1))
+    assert len(dig.opened) == 2 and dig.rush == 0
