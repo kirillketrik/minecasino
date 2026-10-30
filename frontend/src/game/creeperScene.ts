@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Text, TilingSprite } from 'pixi.js'
 import type { Application } from 'pixi.js'
 import { reducedMotion } from '../format.ts'
 import { bonusIntro } from './bonusFx.ts'
+import { Fx, bevel, glow, shadow } from './fx.ts'
 import type { BonusIntro } from './bonusFx.ts'
 import { textureOf } from './sprites.ts'
 import type { SpriteName } from './sprites.ts'
@@ -33,6 +34,15 @@ export type Skin = {
   bonusIcon: SpriteName
   bonusColor: number
   flashColor: number
+  /** Fragment colours of a vanishing block. */
+  debris: number[]
+  /** `blast`: the blocks hiss, swell and burst. `implode`: they spiral into the middle of the cluster. */
+  vanish: 'blast' | 'implode'
+  ambient: number[]
+  /** Screen shake of the first wave, growing with every further one. */
+  shake: number
+  /** Colour of the shock ring and flash of a vanishing cluster. */
+  blast: number
 }
 
 export const CREEPER_SKIN: Skin = {
@@ -56,6 +66,11 @@ export const CREEPER_SKIN: Skin = {
   bonusIcon: 'portal',
   bonusColor: 0xc07cff,
   flashColor: 0x7bf2a3,
+  debris: [0x7bf2a3, 0x2ed56a, 0x16974a, 0xe9ecf1],
+  vanish: 'blast',
+  ambient: [0x3a6b3a, 0x2a4a2a, 0x7bf2a3],
+  shake: 3,
+  blast: 0x7bf2a3,
 }
 
 export const ENDER_SKIN: Skin = {
@@ -79,6 +94,11 @@ export const ENDER_SKIN: Skin = {
   bonusIcon: 'crystal',
   bonusColor: 0xf06ad0,
   flashColor: 0xb86bff,
+  debris: [0xf06ad0, 0xb86bff, 0x6a3fb0, 0xe3e0a8],
+  vanish: 'implode',
+  ambient: [0xb86bff, 0xf06ad0, 0x6a3fb0, 0xe3e0a8],
+  shake: 1.5,
+  blast: 0xb86bff,
 }
 
 export const cellValue = (cell: string) => Number(cell.split(':')[1])
@@ -90,6 +110,7 @@ function makeCell(cell: string, skin: Skin): Container {
   const s = new Sprite(textureOf(name))
   s.scale.set(SCALE)
   box.addChild(s)
+  box.addChild(bevel(CELL))
   if (isMult) {
     const label = new Text({
       text: `×${cellValue(cell)}`,
@@ -116,29 +137,39 @@ export class CreeperScene {
 
   private app: Application
   private skin: Skin
+  private depth: Fx
 
   constructor(app: Application, world: Container, skin: Skin = CREEPER_SKIN) {
     this.app = app
     this.skin = skin
-    const wall = new TilingSprite({ texture: textureOf(skin.wall), width: CREEPER_W, height: CREEPER_H })
+    this.depth = new Fx(app, world, CREEPER_W, CREEPER_H)
+    const wall = new TilingSprite({ texture: textureOf(skin.wall), width: CREEPER_W + 40, height: CREEPER_H + 30 })
+    wall.position.set(-20, -15)
     wall.tileScale.set(SCALE / 1.5)
-    world.addChild(wall)
+    this.depth.back.addChild(wall)
+    this.depth.ambient(skin.ambient, 18, 18, 14)
     this.tint.rect(0, 0, CREEPER_W, CREEPER_H).fill({ color: skin.tint, alpha: 0.32 })
     this.tint.visible = false
-    world.addChild(this.tint)
+    const front = this.depth.front
+    front.addChild(this.tint)
     const frame = new Graphics()
       .rect(OX - 10, OY - 10, COLS * PITCH - GAP + 20, ROWS * PITCH - GAP + 20)
       .fill(0x101216)
-    world.addChild(frame)
+    const rim = glow(CREEPER_W / 2, CREEPER_H / 2, 250, skin.bonusColor, 5, 0.035)
+    const floor = shadow(COLS * PITCH, 0.5)
+    floor.position.set(CREEPER_W / 2, OY + ROWS * PITCH + 10)
+    front.addChild(rim, floor, frame)
     const wells = new Graphics()
     for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) wells.rect(OX + c * PITCH, OY + r * PITCH, CELL, CELL).fill(0x1b1e25)
-    world.addChild(wells, this.layer, this.marks, this.fx)
+    front.addChild(wells, this.layer, this.marks, this.fx)
+    this.depth.raise()
     const idle = skin.idle
     this.setGrid(Array.from({ length: COLS }, (_, c) => Array.from({ length: ROWS }, (_, r) => idle[(c + r) % idle.length])))
   }
 
   destroy() {
     this.alive = false
+    this.depth.destroy()
   }
 
   setGrid(grid: string[][]) {
@@ -177,6 +208,7 @@ export class CreeperScene {
       }),
     )
     await Promise.all(jobs)
+    this.depth.shake(2, 200)
   }
 
   private mark(cells: [number, number][], color = 0xf5bd45) {
@@ -213,6 +245,8 @@ export class CreeperScene {
     this.cells.forEach((col, c) => col.forEach((_, r) => test(this.kinds[c]?.[r] ?? '') && hits.push([c, r])))
     if (!hits.length) return
     this.mark(hits, color)
+    for (const [c, r] of hits) this.depth.burst(cx(c), cy(r), { colors: [color, 0xffffff], count: 6, speed: 90, gravity: -60, life: 0.7, size: 4 })
+    this.depth.ring(this.centre(hits).x, this.centre(hits).y, color, 90)
     if (!reducedMotion()) {
       await tween(this.app, 420, (t) => {
         const k = 1 + Math.sin(t * Math.PI) * 0.18
@@ -230,44 +264,16 @@ export class CreeperScene {
   }
 
   /** Explode one wave's clusters, let the rest fall and refill to `next`. */
-  async playWave(wave: Wave, next: string[][]) {
+  async playWave(wave: Wave, next: string[][], waveIndex = 0) {
     const winners = new Set<string>()
     for (const cl of wave.clusters) for (const [c, r] of cl.cells) winners.add(`${c}:${r}`)
     this.mark([...winners].map((k) => k.split(':').map(Number) as [number, number]))
     await wait(560)
     if (!this.alive) return
 
-    // Explode: swell, then vanish with a burst of fragments.
     const burst = Array.from(winners).map((k) => k.split(':').map(Number) as [number, number])
-    const fragments: { g: Graphics; vx: number; vy: number }[] = []
-    if (!reducedMotion()) {
-      for (const [c, r] of burst) {
-        for (let i = 0; i < 6; i++) {
-          const g = new Graphics().rect(-4, -4, 8, 8).fill([0xf5bd45, 0xe9ecf1, 0x8a93a3][i % 3])
-          g.position.set(cx(c), cy(r))
-          this.fx.addChild(g)
-          const a = (Math.PI * 2 * i) / 6 + c + r
-          fragments.push({ g, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90 - 20 })
-        }
-      }
-    }
     this.marks.clear()
-    await tween(this.app, 380, (t) => {
-      for (const k of winners) {
-        const [c, r] = k.split(':').map(Number)
-        const box = this.cells[c][r]
-        if (!box) continue
-        box.scale.set(t < 0.3 ? 1 + t * 0.5 : 1.15 * (1 - (t - 0.3) / 0.7))
-        box.alpha = t < 0.3 ? 1 : 1 - (t - 0.3) / 0.7
-      }
-      fragments.forEach((f, i) => {
-        f.g.x += f.vx * 0.016
-        f.g.y += f.vy * 0.016 + t * 2
-        f.g.alpha = 1 - t
-        f.g.rotation = t * (i % 2 ? 3 : -3)
-      })
-    }, easeOut)
-    this.fx.removeChildren().forEach((g) => g.destroy())
+    await (this.skin.vanish === 'implode' ? this.implode(burst, waveIndex) : this.blast(burst, waveIndex))
 
     // Collapse: survivors fall to the bottom of their column, fresh cells drop in on top.
     const moves: Promise<void>[] = []
@@ -307,6 +313,67 @@ export class CreeperScene {
     this.cells = rebuilt
     this.kinds = next.map((col) => [...col])
     if (!consistent) this.setGrid(next)
+  }
+
+  /** Centre of a set of cells, in scene pixels. */
+  private centre(cells: [number, number][]) {
+    const x = cells.reduce((sum, [c]) => sum + cx(c), 0) / cells.length
+    const y = cells.reduce((sum, [, r]) => sum + cy(r), 0) / cells.length
+    return { x, y }
+  }
+
+  /** Крипер: the blocks hiss (shake and flash white), swell, then burst with a shock ring and debris. */
+  private async blast(cells: [number, number][], wave: number) {
+    const boxes = cells.map(([c, r]) => this.cells[c][r])
+    await tween(this.app, 420, (t) => {
+      const swell = 1 + t * 0.16
+      boxes.forEach((box, i) => {
+        if (!box) return
+        box.scale.set(swell)
+        box.rotation = Math.sin(t * 38 + i) * 0.045 * t
+        const lit = Math.floor(t * 7) % 2 === 0 && t > 0.35
+        box.children.forEach((ch) => ch instanceof Sprite && (ch.tint = lit ? 0xffffff : 0xdfffe0))
+      })
+    }, easeInOut)
+    const at = this.centre(cells)
+    this.depth.flash(this.skin.blast, 0.28, 220)
+    this.depth.shake(this.skin.shake + wave * 1.6, 380)
+    this.depth.ring(at.x, at.y, this.skin.blast, 150 + cells.length * 4)
+    for (const [c, r] of cells) this.depth.burst(cx(c), cy(r), { colors: this.skin.debris, count: 7, speed: 190, gravity: 520, life: 0.8 })
+    await tween(this.app, 260, (t) => {
+      boxes.forEach((box) => {
+        if (!box) return
+        box.scale.set(1.16 * (1 - t) + 0.001)
+        box.alpha = 1 - t
+      })
+    }, easeOut)
+  }
+
+  /** Врата Края: the blocks come loose, spiral into the middle of the cluster and are gone in a flash. */
+  private async implode(cells: [number, number][], wave: number) {
+    const boxes = cells.map(([c, r]) => this.cells[c][r])
+    const at = this.centre(cells)
+    const from = boxes.map((b) => (b ? { x: b.x, y: b.y } : { x: 0, y: 0 }))
+    this.depth.flash(this.skin.blast, 0.16, 360)
+    await tween(this.app, 620, (t) => {
+      const swirl = t * t * 2.4
+      boxes.forEach((box, i) => {
+        if (!box) return
+        const dx = from[i].x - at.x
+        const dy = from[i].y - at.y
+        const k = 1 - t
+        const cos = Math.cos(swirl)
+        const sin = Math.sin(swirl)
+        box.x = at.x + (dx * cos - dy * sin) * k
+        box.y = at.y + (dx * sin + dy * cos) * k
+        box.rotation = swirl * 1.5
+        box.scale.set(Math.max(0.02, 1 - t * 0.92))
+        box.alpha = t < 0.75 ? 1 : 1 - (t - 0.75) / 0.25
+      })
+    }, easeInOut)
+    this.depth.ring(at.x, at.y, this.skin.blast, 110 + cells.length * 3)
+    this.depth.shake(this.skin.shake + wave, 240)
+    this.depth.burst(at.x, at.y, { colors: this.skin.debris, count: 10 + cells.length, speed: 150, gravity: -40, life: 0.9, size: 4 })
   }
 
   // Survivors are the cells that were not exploded, in order: they must equal the lower part of `next`.
