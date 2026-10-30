@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from math import prod
 from typing import Any, ClassVar
 
-from app.games.base import MAX_WIN_MULTIPLIER, GameResult, InvalidAction
+from app.games.base import MAX_WIN_MULTIPLIER, GameResult, InvalidAction, Tuning
 from app.games.rng import Rng, WeightedTable
 from app.games.slot import SlotGame, SpinOutcome
 
@@ -146,8 +146,8 @@ def count_symbol(grid: Grid, symbol: str) -> int:
     return sum(cell == symbol for column in grid for cell in column)
 
 
-def can_gamble(pot: int, gambles: int, bet: int) -> bool:
-    return gambles < MAX_GAMBLES and pot * 2 <= bet * MAX_WIN_MULTIPLIER
+def can_gamble(pot: int, gambles: int, bet: int, max_win: int = MAX_WIN_MULTIPLIER) -> bool:
+    return gambles < MAX_GAMBLES and pot * 2 <= bet * max_win
 
 
 class MinesGame(SlotGame):
@@ -167,7 +167,7 @@ class MinesGame(SlotGame):
             if count_symbol(grid, DYNAMITE) >= min_scatters:
                 return grid
 
-    def spin(self, unit: int, rng: Rng, mode: str | None) -> SpinOutcome:
+    def spin(self, unit: int, rng: Rng, mode: str | None, tuning: Tuning) -> SpinOutcome:
         line_bet = unit
 
         grid = self._draw_grid(rng, MODE_MIN_SCATTERS.get(mode or "", 0))
@@ -199,7 +199,7 @@ class MinesGame(SlotGame):
 
         return SpinOutcome(total, view)
 
-    def settle(self, bet: int, payout: int, view: dict[str, Any]) -> GameResult:
+    def settle(self, bet: int, payout: int, view: dict[str, Any], tuning: Tuning) -> GameResult:
         """A win stays open: the player collects it or gambles it."""
         if payout == 0:
             return GameResult(bet=bet, payout=0, finished=True, view=view)
@@ -207,16 +207,21 @@ class MinesGame(SlotGame):
             bet=bet,
             payout=0,
             finished=False,
-            state={"pot": payout, "gambles": 0, "spin": view},
-            view={**view, **self._pending(payout, 0, bet)},
+            state={"pot": payout, "gambles": 0, "spin": view, "max_win": tuning.max_win},
+            view={**view, **self._pending(payout, 0, bet, tuning.max_win)},
         )
 
     @staticmethod
-    def _pending(pot: int, gambles: int, bet: int) -> dict[str, Any]:
-        return {"pending": pot, "gambles": gambles, "can_gamble": can_gamble(pot, gambles, bet)}
+    def _pending(pot: int, gambles: int, bet: int, max_win: int) -> dict[str, Any]:
+        return {
+            "pending": pot,
+            "gambles": gambles,
+            "can_gamble": can_gamble(pot, gambles, bet, max_win),
+        }
 
     def act(self, state: dict[str, Any], bet: int, action: dict[str, Any], rng: Rng) -> GameResult:
         pot, gambles, spin = state["pot"], state["gambles"], state["spin"]
+        max_win = state.get("max_win", MAX_WIN_MULTIPLIER)
         match action.get("type"):
             case "collect":
                 return GameResult(
@@ -226,7 +231,7 @@ class MinesGame(SlotGame):
                 color = action.get("color")
                 if color not in CRYSTALS:
                     raise InvalidAction("color must be 'red' or 'blue'")
-                if not can_gamble(pot, gambles, bet):
+                if not can_gamble(pot, gambles, bet, max_win):
                     raise InvalidAction("gamble not available")
                 crystal = CRYSTALS[rng.randbelow(2)]
                 if crystal != color:
@@ -242,8 +247,8 @@ class MinesGame(SlotGame):
                     bet=bet,
                     payout=0,
                     finished=False,
-                    state={"pot": pot, "gambles": gambles, "spin": spin},
-                    view={**spin, "crystal": crystal, **self._pending(pot, gambles, bet)},
+                    state={"pot": pot, "gambles": gambles, "spin": spin, "max_win": max_win},
+                    view={**spin, "crystal": crystal, **self._pending(pot, gambles, bet, max_win)},
                 )
             case _:
                 raise InvalidAction("action must be 'collect' or 'gamble'")

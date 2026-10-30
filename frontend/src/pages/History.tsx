@@ -4,7 +4,7 @@ import type { RoundOut } from '../api.ts'
 import { coins, signed, when } from '../format.ts'
 import { PageHead } from '../ui/shell.tsx'
 
-const NAME: Record<string, string> = { mines: 'Шахта', creeper: 'Крипер', elytra: 'Элитры' }
+const NAME: Record<string, string> = { mines: 'Шахта', creeper: 'Крипер', ender: 'Врата Края', drill: 'Бурение', elytra: 'Элитры' }
 
 const spent = (r: RoundOut): number => r.view.cost ?? r.bet
 
@@ -15,7 +15,7 @@ function outcome(r: RoundOut): string {
 }
 
 function plainOutcome(r: RoundOut): string {
-  if (r.view.capped) return 'Лимит 100×'
+  if (r.view.capped) return 'Лимит выигрыша'
   if (r.view.auto_collected) return 'Забран автоматически'
   if (r.view.lost) return 'Риск не удался'
   if (r.view.status === 'crashed') return 'Элитры сломались'

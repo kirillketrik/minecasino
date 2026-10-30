@@ -15,7 +15,7 @@ type Pending = { id: number; pot: number; canGamble: boolean; gambles: number }
 
 export default function Mines() {
   const slot = useSlot('mines', 'scatter')
-  const { bet, busy, setBusy, setNote, setRunning, setError, fail, setBalance, session, banner, auto } = slot
+  const { info, bet, busy, setBusy, setNote, setRunning, setError, fail, setBalance, session, banner, auto } = slot
   const { scene, ready, onReady } = useScene(({ app, world }) => new MinesScene(app, world))
   const [bonus, setBonus] = useState<{ n: number; mult: number } | null>(null)
   const [pending, setPending] = useState<Pending | null>(null)
@@ -43,11 +43,13 @@ export default function Mines() {
     sfx.spin()
     await s.spin(view.grid)
     sfx.stop(2)
+    // The server scales every pay by the admin-set RTP; the numbers inside the view are unscaled.
+    const k = (view.rtp_scale as number | undefined) ?? 1
     const wins = view.wins as Win[]
     if (wins.length) {
       sfx.win()
       s.highlight(winCells(wins))
-      setRunning(view.base_win)
+      setRunning(Math.round(view.base_win * k))
       setNote(wins.length === 1 ? 'Выигрышная линия' : `Выигрышных линий: ${wins.length}`)
       await wait(950)
     }
@@ -56,7 +58,7 @@ export default function Mines() {
       setNote('Три динамита! Десять бесплатных спинов.')
       s.highlight(winCells([]))
       await s.bonus({ title: 'БОНУС!', sub: '10 БЕСПЛАТНЫХ СПИНОВ' })
-      let total: number = view.base_win
+      let total: number = Math.round(view.base_win * k)
       for (let i = 0; i < view.free_spins.length; i++) {
         const fs = view.free_spins[i]
         setBonus({ n: i + 1, mult: fs.multiplier })
@@ -65,7 +67,7 @@ export default function Mines() {
         if (fs.wins.length) {
           sfx.win(Math.min(4, i))
           s.highlight(winCells(fs.wins as Win[]))
-          total += fs.win
+          total += Math.round(fs.win * k)
           setRunning(total)
           await wait(800)
         } else {
@@ -76,7 +78,7 @@ export default function Mines() {
       setRunning(view.total_win)
     }
     s.clearMarks()
-    if (view.capped) setNote('Достигнут лимит выигрыша — 100× ставки.')
+    if (view.capped) setNote(`Достигнут лимит выигрыша — ${info?.max_win_multiplier ?? 100}× ставки.`)
   }
 
   async function spin(buy = false) {
@@ -218,7 +220,7 @@ export default function Mines() {
                     </div>
                   </div>
                 ) : (
-                  <p className="hint">Дальше рисковать нельзя: достигнут предел риска или лимит 100×.</p>
+                  <p className="hint">Дальше рисковать нельзя: достигнут предел риска или лимит выигрыша.</p>
                 )}
               </section>
             ) : null

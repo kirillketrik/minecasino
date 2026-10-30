@@ -14,5 +14,32 @@ services:
       interval: 5s
       retries: 10
 
+  backend:
+    build: ./backend
+    environment:
+      MINEBET_DATABASE_URL: postgresql+asyncpg://minebet:minebet@db:5432/minebet
+      MINEBET_JWT_SECRET: ${MINEBET_JWT_SECRET:-docker-dev-secret-change-me-docker-dev-secret}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  # Temporary public URL: docker compose --profile tunnel up -d, then docker compose logs tunnel
+  tunnel:
+    profiles: ["tunnel"]
+    image: node:22-alpine
+    volumes:
+      - ./deploy/localtunnel.sh:/localtunnel.sh:ro
+    command: ["sh", "/localtunnel.sh"]
+    depends_on:
+      - web
+    restart: unless-stopped
+
 volumes:
   pgdata:

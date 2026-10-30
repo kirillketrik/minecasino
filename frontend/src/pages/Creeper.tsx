@@ -30,7 +30,7 @@ export default function Creeper() {
   const [bonus, setBonus] = useState<{ n: number; of: number; mult: number } | null>(null)
 
   /** One spin with all its cascades. `carried` is what the round has already won. Returns the new total. */
-  async function playSpin(s: CreeperScene, sp: Spin, carried: number, free: boolean, last: boolean, capped: boolean) {
+  async function playSpin(s: CreeperScene, sp: Spin, carried: number, free: boolean, last: boolean, capped: boolean, k: number) {
     sfx.spin()
     await s.dropIn(sp.grid)
     sfx.stop(3)
@@ -43,7 +43,7 @@ export default function Creeper() {
       setNote(
         w.clusters.length === 1 ? `Кластер из ${w.clusters[0].count} блоков` : `Кластеров в волне: ${w.clusters.length}`,
       )
-      total += w.win
+      total += Math.round(w.win * k)
       setRunning(carried + total)
       sfx.explode(i)
       // The cap stopped the chain before this wave exploded: show it, do not drop new blocks.
@@ -52,13 +52,13 @@ export default function Creeper() {
     const mult = sp.creeper_multiplier
     if (sp.waves.length > 0 && mult > 1) {
       setCreeperMult(mult)
-      setNote(free ? `Множитель бонуса ×${mult}: выигрыш вращения ${coins(sp.win)}` : `Крипер: весь выигрыш ×${mult}`)
+      setNote(free ? `Множитель бонуса ×${mult}: выигрыш вращения ${coins(Math.round(sp.win * k))}` : `Крипер: весь выигрыш ×${mult}`)
       sfx.creeper()
-      await s.flashCreepers()
+      await s.flashMultipliers()
       await wait(250)
     }
     setWave(null)
-    return carried + sp.win
+    return carried + Math.round(sp.win * k)
   }
 
   async function spin(buy = false) {
@@ -74,13 +74,14 @@ export default function Creeper() {
     try {
       const r = await startRound('creeper', bet, slot.roundMode(buy))
       const v = r.view
+      const k = (v.rtp_scale as number | undefined) ?? 1
       const cost = (v.cost as number | undefined) ?? bet
       setBalance(r.balance - r.payout)
       setNote(buy ? 'Бонус куплен. Порталы на поле…' : 'Блоки падают…')
       const capped = Boolean(v.capped)
       const fs = v.free_spins as { awarded: number; spins: Spin[] } | null
 
-      let total = await playSpin(s, v as Spin, 0, false, !fs, capped)
+      let total = await playSpin(s, v as Spin, 0, false, !fs, capped, k)
       if (fs) {
         sfx.dynamite()
         setNote(`Порталы! ${fs.awarded} бесплатных вращений.`)
@@ -94,7 +95,7 @@ export default function Creeper() {
           setCreeperMult(null)
           setNote(`Бонусное вращение ${i + 1}`)
           setBonus({ n: i + 1, of, mult })
-          total = await playSpin(s, sp, total, true, i === fs.spins.length - 1, capped)
+          total = await playSpin(s, sp, total, true, i === fs.spins.length - 1, capped, k)
           mult = sp.creeper_multiplier
           if (sp.retrigger) {
             of += sp.retrigger
@@ -113,7 +114,7 @@ export default function Creeper() {
       setRunning(r.payout > 0 ? r.payout : null)
       setBalance(r.balance)
       if (r.payout === 0) setNote('В этот раз без выигрыша.')
-      else if (v.capped) setNote(`Достигнут лимит выигрыша — 100× ставки: ${coins(r.payout)}.`)
+      else if (v.capped) setNote(`Достигнут лимит выигрыша — ${slot.info?.max_win_multiplier ?? 100}× ставки: ${coins(r.payout)}.`)
       else setNote(`Выигрыш ${coins(r.payout)}.`)
       session.spin(cost, r.payout)
       if (r.payout > 0) banner.show(r.payout, bet)

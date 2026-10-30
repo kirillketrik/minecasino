@@ -21,31 +21,78 @@ const OY = (CREEPER_H - (ROWS * PITCH - GAP)) / 2
 export type Cluster = { symbol: string; count: number; units: number; cells: [number, number][]; win: number }
 export type Wave = { multiplier: number; grid: string[][]; clusters: Cluster[]; win: number }
 
-const SPRITE: Record<string, SpriteName> = {
-  gunpowder: 'gunpowder',
-  redstone: 'redstone',
-  lapis: 'lapis',
-  iron: 'iron',
-  gold: 'gold',
-  emerald: 'emerald',
-  diamond: 'diamond',
-  skull: 'skull',
-  creeper: 'creeper',
-  scatter: 'portal',
+/** How one cluster slot looks: its symbols, its multiplier piece, its wall and its bonus. */
+export type Skin = {
+  sprites: Record<string, SpriteName>
+  /** The piece that carries a multiplier, drawn as `${multiplier}:${value}` (Крипер, Яйцо). */
+  multiplier: string
+  scatter: string
+  wall: SpriteName
+  tint: number
+  idle: string[]
+  bonusIcon: SpriteName
+  bonusColor: number
+  flashColor: number
 }
 
-export const isCreeper = (cell: string) => cell.startsWith('creeper')
-export const creeperValue = (cell: string) => Number(cell.split(':')[1])
+export const CREEPER_SKIN: Skin = {
+  sprites: {
+    gunpowder: 'gunpowder',
+    redstone: 'redstone',
+    lapis: 'lapis',
+    iron: 'iron',
+    gold: 'gold',
+    emerald: 'emerald',
+    diamond: 'diamond',
+    skull: 'skull',
+    creeper: 'creeper',
+    scatter: 'portal',
+  },
+  multiplier: 'creeper',
+  scatter: 'scatter',
+  wall: 'cave',
+  tint: 0x5b2a86,
+  idle: ['gunpowder', 'redstone', 'lapis', 'iron', 'gold', 'emerald'],
+  bonusIcon: 'portal',
+  bonusColor: 0xc07cff,
+  flashColor: 0x7bf2a3,
+}
 
-function makeCell(cell: string): Container {
+export const ENDER_SKIN: Skin = {
+  sprites: {
+    chorus: 'chorus',
+    endstone: 'endstone',
+    obsidian: 'obsidian',
+    pearl: 'pearl',
+    eye: 'eye',
+    shulker: 'shulker',
+    wings: 'wings',
+    head: 'head',
+    egg: 'egg',
+    scatter: 'crystal',
+  },
+  multiplier: 'egg',
+  scatter: 'scatter',
+  wall: 'endwall',
+  tint: 0xa0245f,
+  idle: ['chorus', 'endstone', 'obsidian', 'pearl', 'eye', 'shulker'],
+  bonusIcon: 'crystal',
+  bonusColor: 0xf06ad0,
+  flashColor: 0xb86bff,
+}
+
+export const cellValue = (cell: string) => Number(cell.split(':')[1])
+
+function makeCell(cell: string, skin: Skin): Container {
   const box = new Container()
-  const name = SPRITE[isCreeper(cell) ? 'creeper' : cell] ?? 'coal'
+  const isMult = cell.startsWith(skin.multiplier)
+  const name = skin.sprites[isMult ? skin.multiplier : cell] ?? 'coal'
   const s = new Sprite(textureOf(name))
   s.scale.set(SCALE)
   box.addChild(s)
-  if (isCreeper(cell)) {
+  if (isMult) {
     const label = new Text({
-      text: `×${creeperValue(cell)}`,
+      text: `×${cellValue(cell)}`,
       style: { fontFamily: 'Press Start 2P', fontSize: 15, fill: 0xffffff, stroke: { color: 0x10210c, width: 5 } },
     })
     label.anchor.set(1, 1)
@@ -68,13 +115,15 @@ export class CreeperScene {
   private alive = true
 
   private app: Application
+  private skin: Skin
 
-  constructor(app: Application, world: Container) {
+  constructor(app: Application, world: Container, skin: Skin = CREEPER_SKIN) {
     this.app = app
-    const wall = new TilingSprite({ texture: textureOf('cave'), width: CREEPER_W, height: CREEPER_H })
+    this.skin = skin
+    const wall = new TilingSprite({ texture: textureOf(skin.wall), width: CREEPER_W, height: CREEPER_H })
     wall.tileScale.set(SCALE / 1.5)
     world.addChild(wall)
-    this.tint.rect(0, 0, CREEPER_W, CREEPER_H).fill({ color: 0x5b2a86, alpha: 0.32 })
+    this.tint.rect(0, 0, CREEPER_W, CREEPER_H).fill({ color: skin.tint, alpha: 0.32 })
     this.tint.visible = false
     world.addChild(this.tint)
     const frame = new Graphics()
@@ -84,7 +133,7 @@ export class CreeperScene {
     const wells = new Graphics()
     for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) wells.rect(OX + c * PITCH, OY + r * PITCH, CELL, CELL).fill(0x1b1e25)
     world.addChild(wells, this.layer, this.marks, this.fx)
-    const idle = ['gunpowder', 'redstone', 'lapis', 'iron', 'gold', 'emerald']
+    const idle = skin.idle
     this.setGrid(Array.from({ length: COLS }, (_, c) => Array.from({ length: ROWS }, (_, r) => idle[(c + r) % idle.length])))
   }
 
@@ -97,7 +146,7 @@ export class CreeperScene {
     this.layer.removeChildren().forEach((c) => c.destroy({ children: true }))
     this.cells = grid.map((col, c) =>
       col.map((cell, r) => {
-        const box = makeCell(cell)
+        const box = makeCell(cell, this.skin)
         box.position.set(cx(c), cy(r))
         this.layer.addChild(box)
         return box
@@ -141,22 +190,22 @@ export class CreeperScene {
 
   /** Full-field announcement of a won bonus. */
   bonus(opts: Pick<BonusIntro, 'title' | 'sub'>) {
-    return bonusIntro(this.app, this.fx, CREEPER_W, CREEPER_H, { icon: 'portal', color: 0xc07cff, ...opts })
+    return bonusIntro(this.app, this.fx, CREEPER_W, CREEPER_H, { icon: this.skin.bonusIcon, color: this.skin.bonusColor, ...opts })
   }
 
-  /** Free spins are played on a purple-tinted wall. */
+  /** Free spins are played on a tinted wall. */
   setFree(on: boolean) {
     this.tint.visible = on
   }
 
-  /** Light up the creepers that landed, when their sum multiplies the total. */
-  flashCreepers() {
-    return this.pulse((cell) => isCreeper(cell), 0x7bf2a3)
+  /** Light up the multiplier pieces that landed, when their sum multiplies the total. */
+  flashMultipliers() {
+    return this.pulse((cell) => cell.startsWith(this.skin.multiplier), this.skin.flashColor)
   }
 
   /** Light up the portals that start or extend the free spins. */
   flashScatters() {
-    return this.pulse((cell) => cell === 'scatter', 0xc07cff)
+    return this.pulse((cell) => cell === this.skin.scatter, this.skin.bonusColor)
   }
 
   private async pulse(test: (cell: string) => boolean, color: number) {
@@ -236,7 +285,7 @@ export class CreeperScene {
       const fresh = ROWS - survivors.length
       const col: Container[] = []
       for (let k = 0; k < fresh; k++) {
-        const box = makeCell(next[c][k])
+        const box = makeCell(next[c][k], this.skin)
         box.position.set(cx(c), cy(-(fresh - k)))
         this.layer.addChild(box)
         col.push(box)

@@ -11,6 +11,10 @@ export type SpriteName =
   | 'gunpowder' | 'redstone' | 'lapis' | 'emerald' | 'skull' | 'creeper' | 'portal'
   // Элитры
   | 'elytra' | 'stone' | 'cave'
+  // Врата Края
+  | 'chorus' | 'endstone' | 'obsidian' | 'pearl' | 'eye' | 'shulker' | 'wings' | 'head' | 'egg' | 'crystal' | 'endwall'
+  // Бурение
+  | 'dirt' | 'chest' | 'chestopen' | 'drill'
 
 const SIZE = 16
 
@@ -263,6 +267,245 @@ const builders: Record<SpriteName, () => HTMLCanvasElement> = {
     ),
   stone: () => make((c) => block(c, ['#34373e', '#30333a', '#383b43'], '#26282d', rng(5))),
   cave: () => make((c) => block(c, ['#23252b', '#202228', '#272a30', '#1d1f24'], '#181a1e', rng(9))),
+  // Врата Края
+  chorus: () =>
+    make((c) => {
+      const r = rng(151)
+      block(c, ['#8f6aa3', '#82599a', '#9c78b0', '#76508d'], '#4b2f5e', r)
+      for (let i = 0; i < 14; i++) px(c, ['#d7b6ea', '#b48ad0', '#5a3a70'][i % 3], 2 + Math.floor(r() * 12), 2 + Math.floor(r() * 12), 1 + Math.floor(r() * 2), 1)
+    }),
+  endstone: () =>
+    make((c) => {
+      const r = rng(163)
+      block(c, ['#e3e0a8', '#d9d69b', '#ecebb9', '#cfcc8c'], '#8f8c5c', r)
+      for (let i = 0; i < 8; i++) px(c, ['#f6f4d0', '#bdb97a'][i % 2], 2 + Math.floor(r() * 11), 2 + Math.floor(r() * 11), 2, 1)
+    }),
+  obsidian: () =>
+    make((c) => {
+      const r = rng(173)
+      block(c, ['#1b1030', '#150c26', '#24153f', '#110920'], '#0a0514', r)
+      for (let i = 0; i < 7; i++) px(c, ['#4b2c80', '#6a3fb0'][i % 2], 2 + Math.floor(r() * 12), 2 + Math.floor(r() * 12), 1, 1 + Math.floor(r() * 2))
+    }),
+  pearl: () =>
+    bitmap(
+      [
+        '................',
+        '......oooooo....',
+        '....ooggGGggoo..',
+        '...ogGGGhhGGGgo.',
+        '..ogGGGhhGGGGGgo',
+        '..ogGGGGGGGGGGgo',
+        '..ogGGGGGGGGGGgo',
+        '..ogGGGGGGGGGGgo',
+        '..ogGGGGGGGGGGgo',
+        '...ogGGGGGGGGgo.',
+        '...oggGGGGGGggo.',
+        '....ooggggggoo..',
+        '......oooooo....',
+        '................',
+        '................',
+        '................',
+      ],
+      { o: '#0d3b33', g: '#1f8f7a', G: '#34c9a8', h: '#b5f7e8' },
+    ),
+  eye: () =>
+    bitmap(
+      [
+        '................',
+        '......oooooo....',
+        '....ooggGGggoo..',
+        '...ogGGGGGGGGgo.',
+        '..ogGGGGyyGGGGgo',
+        '..ogGGGyykyGGGgo',
+        '..ogGGyykkkyGGgo',
+        '..ogGGyykkkyGGgo',
+        '..ogGGGyykyGGGgo',
+        '...ogGGGyyGGGgo.',
+        '...oggGGGGGGggo.',
+        '....ooggggggoo..',
+        '......oooooo....',
+        '................',
+        '................',
+        '................',
+      ],
+      { o: '#17331f', g: '#2f8a4a', G: '#4fc46f', y: '#f0b43a', k: '#1a0f24' },
+    ),
+  shulker: () =>
+    bitmap(
+      [
+        '................',
+        '................',
+        '...oooooooooo...',
+        '..oLLLLLLLLLLo..',
+        '..oLllllllllLo..',
+        '..oooooooooooo..',
+        '..oBBBBBBBBBBo..',
+        '..oBkkkBBkkkBo..',
+        '..oBkykBBkykBo..',
+        '..oBkkkBBkkkBo..',
+        '..oBBBBBBBBBBo..',
+        '..oooooooooooo..',
+        '................',
+        '................',
+        '................',
+        '................',
+      ],
+      { o: '#4a2a63', L: '#a572c4', l: '#c79be0', B: '#8e5eae', k: '#1a0f24', y: '#f2e36b' },
+    ),
+  wings: () =>
+    bitmap(
+      [
+        '................',
+        '.pp..........pp.',
+        '.pPp........pPp.',
+        'pPPPp......pPPPp',
+        'pPPPPpp..ppPPPPp',
+        'pPhPPPPppPPPPhPp',
+        '.pPPPPPPPPPPPPp.',
+        '..pPPPPPPPPPPp..',
+        '...ppPPPPPPpp...',
+        '.....ppPPpp.....',
+        '.......pp.......',
+        '................',
+        '................',
+        '................',
+        '................',
+        '................',
+      ],
+      { p: '#2b6f7a', P: '#5fd0d6', h: '#d4fdff' },
+    ),
+  head: () =>
+    make((c) => {
+      const r = rng(181)
+      block(c, ['#16101f', '#120c1b', '#1b1427'], '#0a0710', r)
+      px(c, '#8a7aa0', 1, 1, 2, 3)
+      px(c, '#8a7aa0', 13, 1, 2, 3)
+      px(c, '#d27bff', 3, 5, 3, 2)
+      px(c, '#d27bff', 10, 5, 3, 2)
+      px(c, '#ffffff', 4, 5, 1, 1)
+      px(c, '#ffffff', 11, 5, 1, 1)
+      px(c, '#4b2c80', 6, 9, 1, 2)
+      px(c, '#4b2c80', 9, 9, 1, 2)
+      for (const x of [3, 6, 9, 12]) px(c, '#e8e4d2', x, 12, 1, 2)
+    }),
+  egg: () =>
+    bitmap(
+      [
+        '................',
+        '.......oo.......',
+        '......oBBo......',
+        '.....oBBpBo.....',
+        '.....oBBBBo.....',
+        '....oBpBBBBo....',
+        '....oBBBBpBo....',
+        '...oBBBpBBBBo...',
+        '...oBBBBBBpBo...',
+        '...oBpBBBBBBo...',
+        '...oBBBBBpBBo...',
+        '....oBBpBBBo....',
+        '....oBBBBBBo....',
+        '.....oBBBBo.....',
+        '......oooo......',
+        '................',
+      ],
+      { o: '#6a3fb0', B: '#14091f', p: '#b86bff' },
+    ),
+  crystal: () =>
+    bitmap(
+      [
+        '.......mm.......',
+        '......mMMm......',
+        '.....mMwwMm.....',
+        '....mMwWWwMm....',
+        '...mMwWccWwMm...',
+        '..mMwWccccWwMm..',
+        '..mMwWccccWwMm..',
+        '...mMwWccWwMm...',
+        '....mMwWWwMm....',
+        '.....mMwwMm.....',
+        '......mMMm......',
+        '.......mm.......',
+        '................',
+        '................',
+        '................',
+        '................',
+      ],
+      { m: '#7a1f6e', M: '#e04fc0', w: '#f59be0', W: '#ffd6f4', c: '#ffffff' },
+    ),
+  endwall: () => make((c) => block(c, ['#241a38', '#20162f', '#281d3f', '#1b1329'], '#150e22', rng(19))),
+  // Бурение
+  dirt: () =>
+    make((c) => {
+      const r = rng(211)
+      block(c, ['#8a5a36', '#7c4f2e', '#955f3a', '#6f4527'], '#4a2e18', r)
+      for (let i = 0; i < 7; i++) px(c, ['#a8714a', '#5a381e'][i % 2], 2 + Math.floor(r() * 12), 2 + Math.floor(r() * 12), 1 + Math.floor(r() * 2), 1)
+    }),
+  chest: () =>
+    bitmap(
+      [
+        '................',
+        '................',
+        '..bbbbbbbbbbbb..',
+        '.bBBBBBBBBBBBBb.',
+        '.bBBBBBBBBBBBBb.',
+        '.bBBBBBBBBBBBBb.',
+        '.kkkkkkyykkkkkk.',
+        '.bBBBBByyBBBBBb.',
+        '.bBBBBByyBBBBBb.',
+        '.bBBBBBBBBBBBBb.',
+        '.bBBBBBBBBBBBBb.',
+        '.bbbbbbbbbbbbbb.',
+        '................',
+        '................',
+        '................',
+        '................',
+      ],
+      { b: '#5f3d1a', B: '#9a6a34', k: '#2a2622', y: '#f7c948' },
+    ),
+  chestopen: () =>
+    bitmap(
+      [
+        '..bbbbbbbbbbbb..',
+        '.bBBBBBBBBBBBBb.',
+        '.bBBBBBBBBBBBBb.',
+        '.bbbbbbbbbbbbbb.',
+        '.kkkkkkkkkkkkkk.',
+        '.kyyyyfyyyyfyyk.',
+        '.kyfyyyyyfyyyyk.',
+        '.kkkkkkkkkkkkkk.',
+        '.bBBBBBBBBBBBBb.',
+        '.bBBBBBBBBBBBBb.',
+        '.bBBBBBBBBBBBBb.',
+        '.bbbbbbbbbbbbbb.',
+        '................',
+        '................',
+        '................',
+        '................',
+      ],
+      { b: '#5f3d1a', B: '#9a6a34', k: '#2a2622', y: '#f7c948', f: '#fff0a0' },
+    ),
+  drill: () =>
+    bitmap(
+      [
+        '.....cc.........',
+        '....cCCc........',
+        '...cCggCc.......',
+        '...cgGGgc.......',
+        '....cgGgc.......',
+        '....cgGgc.......',
+        '...cgGGggc......',
+        '...cgGgGgc......',
+        '..cCgGGgGCc.....',
+        '..ccggGGggcc....',
+        '...ccgGgcc......',
+        '....ccgcc.......',
+        '.....cyc........',
+        '.....yyy........',
+        '....yYYYy.......',
+        '....yyyyy.......',
+      ],
+      { c: '#f2f4f8', C: '#c4c9d1', g: '#8c929c', G: '#5d636d', y: '#e9b52b', Y: '#b88a1a' },
+    ),
 }
 
 const cache = new Map<SpriteName, HTMLCanvasElement>()

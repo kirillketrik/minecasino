@@ -205,7 +205,7 @@ export function SlotPanel({ slot, ready, onSpin, modeTitle, buyHint, spinLabel, 
         confirmBuy ? (
           <div className="buy-confirm" role="group" aria-label="Подтверждение покупки бонуса">
             <p className="hint">
-              {buyHint} Спишется {coins(buyCost)} монет. Максимальный выигрыш по-прежнему 100× ставки.
+              {buyHint} Спишется {coins(buyCost)} монет. Максимальный выигрыш по-прежнему {info.max_win_multiplier}× ставки.
             </p>
             <button type="button" className="btn btn-primary btn-wide" disabled={busy || buyCost > balance} onClick={() => onSpin(true)}>
               Купить за {coins(buyCost)}

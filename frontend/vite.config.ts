@@ -5,6 +5,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // dev tunnels (localtunnel / localhost.run) send their own Host header
+    allowedHosts: ['.loca.lt', '.lhr.life', '.serveousercontent.com'],
     proxy: { '/api': { target: process.env.API_TARGET ?? 'http://localhost:8000', ws: true } },
   },
 })

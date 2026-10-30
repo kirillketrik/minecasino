@@ -15,6 +15,7 @@ from app.games.base import Game, GameResult, InvalidAction
 from app.games.engine import finalize
 from app.games.registry import get_game
 from app.games.rng import Rng
+from app.games.slot import SlotGame
 from app.limits import check_play
 from app.models import Round, TxKind
 from app.wallet import apply_transaction
@@ -58,6 +59,7 @@ async def _settle_abandoned(
     session: AsyncSession, rng: Rng, settings: Settings, user_id: int
 ) -> None:
     """Starting a new round collects whatever the player left pending in open ones."""
+    runtime = await runtime_config.load(session)
     open_rounds = (
         await session.execute(
             select(Round)
@@ -70,7 +72,8 @@ async def _settle_abandoned(
         game = get_game(round_.game_id)
         result = game.abandon(round_.state, round_.bet, rng) if game else None
         if result is not None:
-            await _settle(session, round_, finalize(result, settings.max_win_multiplier))
+            cap = runtime.max_win(game, settings.max_win_multiplier)
+            await _settle(session, round_, finalize(result, cap))
 
 
 async def start_round(
@@ -106,10 +109,12 @@ async def start_round(
     await session.flush()
     await apply_transaction(session, user_id, TxKind.BET, -cost, ref=f"round:{round_.id}")
 
-    result = finalize(
-        game.start(bet, rng) if mode is None else game.start(bet, rng, mode),
-        settings.max_win_multiplier,
-    )
+    runtime = await runtime_config.load(session)
+    if isinstance(game, SlotGame):
+        raw = game.start(bet, rng, mode, runtime.tuning(game, settings.max_win_multiplier))
+    else:
+        raw = game.start(bet, rng) if mode is None else game.start(bet, rng, mode)
+    result = finalize(raw, runtime.max_win(game, settings.max_win_multiplier))
     await _settle(session, round_, result)
     await session.flush()
     return round_
@@ -134,7 +139,9 @@ async def act_round(
         raise RoundFinished
 
     game = _require_game(round_.game_id)
-    result = finalize(game.act(round_.state, round_.bet, action, rng), settings.max_win_multiplier)
+    runtime = await runtime_config.load(session)
+    cap = runtime.max_win(game, settings.max_win_multiplier)
+    result = finalize(game.act(round_.state, round_.bet, action, rng), cap)
     if result.bet != round_.bet:
         raise RuntimeError(f"{game.id} changed the bet of round {round_.id}")
     await _settle(session, round_, result)

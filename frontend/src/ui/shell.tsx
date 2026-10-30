@@ -11,6 +11,8 @@ const NAV: { route: Route; label: string; icon: SpriteName }[] = [
   { route: 'lobby', label: 'Игры', icon: 'stone' },
   { route: 'mines', label: 'Шахта', icon: 'pickaxe' },
   { route: 'creeper', label: 'Крипер', icon: 'creeper' },
+  { route: 'ender', label: 'Врата Края', icon: 'head' },
+  { route: 'drill', label: 'Бурение', icon: 'drill' },
   { route: 'elytra', label: 'Элитры', icon: 'elytra' },
   { route: 'wallet', label: 'Кошелёк', icon: 'gold' },
   { route: 'history', label: 'История', icon: 'dynamite' },

@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from math import comb
 from typing import Any, ClassVar
 
-from app.games.base import MAX_WIN_MULTIPLIER
+from app.games.base import MAX_WIN_MULTIPLIER, Tuning
 from app.games.rng import Rng, WeightedTable
 from app.games.slot import SlotGame, SpinOutcome
 
@@ -96,6 +96,7 @@ BOUGHT_SCATTERS = 4
 
 MAX_WAVE_MULTIPLIER = 10
 MAX_WAVES = 200  # safety net; a chain this long is astronomically unlikely
+DEFAULT_CAP_UNITS = MAX_WIN_MULTIPLIER * UNITS_PER_BET
 
 Grid = list[list[str]]  # grid[col][row], row 0 is the top
 
@@ -196,6 +197,7 @@ class CreeperGame(SlotGame):
         kind: str = "base",
         force_scatters: int = 0,
         sticky: int | None = None,
+        cap_units: int = DEFAULT_CAP_UNITS,
     ) -> Resolution:
         """Play one spin through all its cascades. Pays are in 1/20 bet.
 
@@ -215,7 +217,6 @@ class CreeperGame(SlotGame):
         creepers = [creeper_value(c) for col in grid for c in col if is_creeper(c)]
         scatters = sum(c == SCATTER for col in grid for c in col)
         total = 0
-        cap_units = MAX_WIN_MULTIPLIER * UNITS_PER_BET
         fill_kind = "free" if sticky is not None else kind
 
         for number in range(1, max_waves + 1):
@@ -268,16 +269,26 @@ class CreeperGame(SlotGame):
         )
 
     def play_bonus(
-        self, rng: Rng, awarded: int, *, record: bool = True, stop_at_cap: bool = True
+        self,
+        rng: Rng,
+        awarded: int,
+        *,
+        record: bool = True,
+        stop_at_cap: bool = True,
+        cap_units: int = DEFAULT_CAP_UNITS,
     ) -> Bonus:
         """All free spins of a bonus. Stops early once the pay reaches the win cap."""
-        cap_units = MAX_WIN_MULTIPLIER * UNITS_PER_BET
         left, sticky, total = awarded, 0, 0
         spins: list[Resolution] = []
         retriggers: list[int] = []
         while left > 0 and len(spins) < MAX_FREE_SPINS:
             res = self.resolve(
-                rng, record=record, stop_at_cap=stop_at_cap, kind="free", sticky=sticky
+                rng,
+                record=record,
+                stop_at_cap=stop_at_cap,
+                kind="free",
+                sticky=sticky,
+                cap_units=cap_units,
             )
             left -= 1
             sticky = res.creeper_multiplier
@@ -291,20 +302,33 @@ class CreeperGame(SlotGame):
         return Bonus(awarded, spins, retriggers, total)
 
     def play(
-        self, rng: Rng, mode: str | None, *, record: bool = True, stop_at_cap: bool = True
+        self,
+        rng: Rng,
+        mode: str | None,
+        *,
+        record: bool = True,
+        stop_at_cap: bool = True,
+        cap_units: int = DEFAULT_CAP_UNITS,
     ) -> tuple[Resolution, Bonus | None]:
         """The triggering spin and, when it earned them, the free spins."""
         kind = "ante" if mode == ANTE_MODE else "base"
         forced = BOUGHT_SCATTERS if mode == BUY_BONUS_MODE else 0
         base = self.resolve(
-            rng, record=record, stop_at_cap=stop_at_cap, kind=kind, force_scatters=forced
+            rng,
+            record=record,
+            stop_at_cap=stop_at_cap,
+            kind=kind,
+            force_scatters=forced,
+            cap_units=cap_units,
         )
         awarded = free_spins_awarded(base.scatters)
         if not awarded:
             return base, None
-        if stop_at_cap and base.units >= MAX_WIN_MULTIPLIER * UNITS_PER_BET:
+        if stop_at_cap and base.units >= cap_units:
             return base, None
-        return base, self.play_bonus(rng, awarded, record=record, stop_at_cap=stop_at_cap)
+        return base, self.play_bonus(
+            rng, awarded, record=record, stop_at_cap=stop_at_cap, cap_units=cap_units
+        )
 
     @staticmethod
     def _spin_view(res: Resolution, unit: int) -> dict[str, Any]:
@@ -328,8 +352,8 @@ class CreeperGame(SlotGame):
             "win": res.units * unit,
         }
 
-    def spin(self, unit: int, rng: Rng, mode: str | None) -> SpinOutcome:
-        base, bonus = self.play(rng, mode)
+    def spin(self, unit: int, rng: Rng, mode: str | None, tuning: Tuning) -> SpinOutcome:
+        base, bonus = self.play(rng, mode, cap_units=tuning.raw_cap_units(UNITS_PER_BET))
         raw = (base.units + (bonus.units if bonus else 0)) * unit
         view: dict[str, Any] = {
             **self._spin_view(base, unit),

@@ -8,6 +8,7 @@ win cap to every result, so a game cannot pay out more than the cap even if its 
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from math import ceil
 from typing import Any, ClassVar
 
 from app.games.rng import Rng
@@ -65,3 +66,19 @@ class Game(ABC):
         Return the finished result to settle it, or None if the round must stay open.
         """
         return None
+
+
+@dataclass(frozen=True)
+class Tuning:
+    """Admin-set knobs of a slot, applied on top of its calibrated maths.
+
+    `rtp_factor` scales every pay (RTP is linear in the pays); `max_win` is this game's win cap in
+    bets. The defaults are the calibrated game: 96% and the global cap.
+    """
+
+    max_win: int = MAX_WIN_MULTIPLIER
+    rtp_factor: float = 1.0
+
+    def raw_cap_units(self, units_per_bet: int) -> int:
+        """The win cap as the game itself counts it, before `rtp_factor` is applied."""
+        return ceil(self.max_win * units_per_bet / self.rtp_factor)

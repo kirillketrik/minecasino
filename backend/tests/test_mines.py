@@ -288,6 +288,7 @@ async def test_real_game_is_registered_and_listed(client: AsyncClient, auth: dic
         "max_bet": 1000,
         "bet_step": 20,
         "max_win_multiplier": 100,
+        "rtp": 0.96,
         "modes": MinesGame.modes,
     }
 

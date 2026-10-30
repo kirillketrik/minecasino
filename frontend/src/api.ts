@@ -95,9 +95,23 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 
 export type User = { id: number; email: string; mc_nick: string; balance: number; created_at: string; excluded_until: string | null; is_admin: boolean }
 
-export type GameConfig = { disabled_modes: string[]; max_bet: number | null }
+export type GameConfig = { disabled_modes: string[]; max_bet: number | null; rtp: number | null; max_win: number | null }
 export type RuntimeConfig = { win_tiers: number[]; games: Record<string, GameConfig> }
-export type AdminConfig = { config: RuntimeConfig; games: { id: string; modes: string[]; max_bet: number }[] }
+export type AdminGame = {
+  id: string
+  modes: string[]
+  max_bet: number
+  /** Slots only: RTP and win cap can be set. */
+  tunable: boolean
+  default_rtp: number
+  default_max_win: number
+  min_rtp: number
+  max_rtp: number
+  min_max_win: number
+  max_max_win: number
+}
+export type AdminConfig = { config: RuntimeConfig; games: AdminGame[] }
+export type Simulation = { rounds: number; rtp: number; stderr: number; hit_rate: number; max_multiplier: number; capped_rounds: number }
 
 export type Limits = {
   deposit_limit: number | null
@@ -114,6 +128,8 @@ export type GameInfo = {
   max_bet: number
   bet_step: number
   max_win_multiplier: number
+  /** What the game returns to players in the long run (0.96 = 96%). */
+  rtp: number
   /** Play modes: id -> price in 1/20 of the bet. */
   modes: Record<string, number>
 }

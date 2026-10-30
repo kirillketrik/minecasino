@@ -11,6 +11,7 @@ from app.config import Settings, get_settings
 from app.games import registry, service
 from app.games.base import InvalidAction
 from app.games.rng import Rng, secure_rng
+from app.games.slot import SlotGame
 from app.limits import PlayBlocked
 from app.models import Round, User
 from app.wallet import InsufficientFunds
@@ -34,6 +35,7 @@ class GameInfo(BaseModel):
     max_bet: int
     bet_step: int
     max_win_multiplier: int
+    rtp: float  # what the game returns to players in the long run (0.96 = 96%)
     modes: dict[str, int] = {}
 
 
@@ -79,7 +81,10 @@ async def list_games(settings: SettingsDep, session: SessionDep) -> list[GameInf
             min_bet=max(settings.min_bet, g.min_bet),
             max_bet=min(settings.max_bet, config.game(g.id).max_bet or settings.max_bet),
             bet_step=g.bet_step,
-            max_win_multiplier=settings.max_win_multiplier,
+            max_win_multiplier=config.max_win(g, settings.max_win_multiplier),
+            rtp=(config.game(g.id).rtp or g.target_rtp)
+            if isinstance(g, SlotGame)
+            else g.target_rtp,
             modes={k: v for k, v in g.modes.items() if k not in config.game(g.id).disabled_modes},
         )
         for g in registry.all_games()

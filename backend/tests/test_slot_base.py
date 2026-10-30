@@ -4,7 +4,7 @@ import random
 
 import pytest
 
-from app.games.base import MAX_WIN_MULTIPLIER, InvalidAction
+from app.games.base import MAX_WIN_MULTIPLIER, InvalidAction, Tuning
 from app.games.rng import Rng
 from app.games.slot import SlotGame, SpinOutcome
 
@@ -16,7 +16,7 @@ class Stub(SlotGame):
     def __init__(self, win: int) -> None:
         self.win = win
 
-    def spin(self, unit: int, rng: Rng, mode: str | None) -> SpinOutcome:
+    def spin(self, unit: int, rng: Rng, mode: str | None, tuning: Tuning) -> SpinOutcome:
         return SpinOutcome(self.win * unit, {"unit": unit})
 
 

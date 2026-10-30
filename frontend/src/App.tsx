@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './auth.tsx'
 import { go, useRoute } from './route.ts'
 import Auth from './pages/Auth.tsx'
 import Creeper from './pages/Creeper.tsx'
+import Ender from './pages/Ender.tsx'
+import Drill from './pages/Drill.tsx'
 import Elytra from './pages/Elytra.tsx'
 import Admin from './pages/Admin.tsx'
 import History from './pages/History.tsx'
@@ -30,6 +32,8 @@ function Routes() {
     lobby: <Lobby />,
     mines: <Mines />,
     creeper: <Creeper />,
+    ender: <Ender />,
+    drill: <Drill />,
     elytra: <Elytra />,
     wallet: <Wallet />,
     history: <History />,

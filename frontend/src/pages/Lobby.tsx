@@ -6,7 +6,7 @@ import { useGameInfo } from '../ui/bet.tsx'
 import { PageHead } from '../ui/shell.tsx'
 
 type Entry = {
-  id: 'mines' | 'creeper' | 'elytra'
+  id: 'mines' | 'creeper' | 'ender' | 'drill' | 'elytra'
   name: string
   pitch: string
   facts: string[]
@@ -34,6 +34,28 @@ const GAMES: Entry[] = [
     art: [
       ['gunpowder', 'creeper', 'emerald', 'skull'],
       ['lapis', 'gunpowder', 'diamond', 'redstone'],
+    ],
+  },
+  {
+    id: 'ender',
+    name: 'Врата Края',
+    pitch:
+      'Поле 6×5 в стиле Края. Восемь одинаковых блоков в любом месте платят, новые падают сверху. Драконьи яйца ×2…×500 складываются и множат выигрыш, а кристаллы Края платят сами и дарят 15 бесплатных вращений.',
+    facts: ['Кластеры от 8', 'Яйца ×2…×500', 'Копящийся множитель в бонусе'],
+    art: [
+      ['chorus', 'egg', 'eye', 'head'],
+      ['obsidian', 'crystal', 'shulker', 'wings'],
+    ],
+  },
+  {
+    id: 'drill',
+    name: 'Бурение',
+    pitch:
+      'Шахта 5×7: сверху падают кирки пяти уровней, динамит и бур. Они пробиваются сквозь землю, руды и обсидиан к сундукам, а чем глубже и твёрже блок, тем больше он платит. Главный сундук приносит до 100 ставок.',
+    facts: ['Кирки, динамит и бур', 'Сундуки до 100×', 'Один сундук главный'],
+    art: [
+      ['dirt', 'coal', 'iron', 'gold'],
+      ['pickaxe', 'dynamite', 'drill', 'chest'],
     ],
   },
   {
@@ -76,11 +98,11 @@ function Row({ entry }: { entry: Entry }) {
           </div>
           <div>
             <dt>Выигрыш</dt>
-            <dd>до 100×</dd>
+            <dd>{info ? `до ${info.max_win_multiplier}×` : '—'}</dd>
           </div>
           <div>
             <dt>Возврат</dt>
-            <dd>96%</dd>
+            <dd>{info ? `${Math.round(info.rtp * 1000) / 10}%` : '—'}</dd>
           </div>
         </dl>
         <a className="btn btn-primary" href={`#/${entry.id}`}>

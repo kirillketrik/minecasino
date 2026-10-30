@@ -10,9 +10,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.games.base import Game, GameResult
+from app.games.base import Game, GameResult, Tuning
 from app.games.engine import finalize
 from app.games.rng import Rng
+from app.games.slot import SlotGame
 
 # (game, state, bet, rng) -> action to play next. Used for games that stay open after `start`.
 Policy = Callable[[Game, dict[str, Any], int, Rng], dict[str, Any]]
@@ -38,6 +39,7 @@ def simulate(
     *,
     bet: int = 100,
     max_multiplier: int = 100,
+    tuning: Tuning | None = None,
     policy: Policy | None = None,
     max_steps: int = 1000,
 ) -> SimReport:
@@ -45,7 +47,11 @@ def simulate(
     hits = capped = 0
     top = 0.0
     for _ in range(rounds):
-        raw = game.start(bet, rng)
+        raw = (
+            game.start(bet, rng, None, tuning)
+            if tuning and isinstance(game, SlotGame)
+            else game.start(bet, rng)
+        )
         result = _play_out(game, raw, rng, bet, max_multiplier, policy, max_steps)
         ret = result.payout / bet
         total += ret
